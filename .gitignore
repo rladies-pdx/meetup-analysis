@@ -16,6 +16,8 @@
 
 # RStudio files
 .Rproj.user/
+*.Rproj
+rsconnect/
 
 # produced vignettes
 vignettes/*.html
@@ -27,7 +29,12 @@ vignettes/*.pdf
 # knitr and R markdown default cache directories
 /*_cache/
 /cache/
+*.html
 
 # Temporary files created by R markdown
 *.utf8.md
 *.knit.md
+.Rproj.user
+
+# Data dump folders for reconstructing or debugging api calls
+rladies_meetup_events/

@@ -1,0 +1,328 @@
+---
+title: "R-Ladies Meetups"
+author: "Augustina Ragwitz"
+date: "November 20, 2017"
+output: html_document
+params:
+  meetup_api_key: !r Sys.getenv("API_KEY_MEETUP")
+  output_folder: !r Sys.Date()
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(dplyr)
+library(ggmap)
+library(httr)
+library(jsonlite)
+library(purrr)
+library(stringr)
+library(tidyr)
+```
+
+```{r globals}
+dir.create(file.path(params$output_folder))
+
+get_meetups <- function (url, query) {
+  req <- GET(url, query=query)
+  print(paste(req$url))
+  json <- content(req, as = "text")
+  things <- fromJSON(json, flatten=TRUE)
+  return(things)
+}
+```
+
+
+# Overview
+
+R-Ladies has developed a package called MeetupR to streamline Meetup analysis. The goal of this notebook is to call the Meetup API directly to document API calls and parameters, then compare the results to the MeetupR implementation. If there are possible improvements then patches will be proposed!
+
+Additionally it would be great to have a dynamic dashboard that shows Meetup stats so we can get the latest and greatest for conference presentations.
+
+## Repo Link
+
+https://github.com/rladies-pdx/meetup-analysis
+
+# Meetup Groups
+
+Identifying Meetup groups should be straightforward because R-Ladies exists as a Meetup topic. Unfortunately not every group is using this topic. This uses the "find_groups" function from the Meetup API.
+
+```{r find_groups, eval=FALSE}
+
+groups_url <- "https://api.meetup.com/find/groups"
+
+groups_query_params <- list(
+  key=params$meetup_api_key, 
+  sign=TRUE,
+  page=200,
+  radius="global")
+
+# by topic
+meetup_groups_topic <- get_meetups(groups_url, append(groups_query_params, c(topic_id=1513883, order="members")))
+
+# by text + category
+meetup_groups_text <- get_meetups(groups_url, append(groups_query_params, c(text="r-ladies", category=34)))
+
+meetup_groups_aggr <- bind_rows(meetup_groups_topic, meetup_groups_text %>% anti_join(meetup_groups_topic, by="id"))
+meetup_groups <- meetup_groups_aggr %>% filter(str_detect(name, "[Rr]([ -]?)[Ll]adies"))
+
+meetup_groups <- meetup_groups %>%
+  mutate(events_url = paste("https://api.meetup.com/", urlname, "/events", sep="")) %>%
+  select(-meta_category.category_ids) # csv writer thinks this is a list
+
+write.csv(meetup_groups, paste(params$output_folder, "rladies_meetup_groups.csv", sep="/"), row.names = FALSE, na = "")
+write.csv(meetup_groups_topic %>% select(-meta_category.category_ids), 
+          paste(params$output_folder, "rladies_meetup_groups_topic.csv", sep="/"), 
+          row.names = FALSE, na = "")
+write.csv(meetup_groups_text %>% select(-meta_category.category_ids), 
+          paste(params$output_folder, "rladies_meetup_groups_text.csv", sep="/"), 
+          row.names = FALSE, na = "")
+
+```
+
+```{r meetup_groups}
+
+meetup_groups <- read.csv(paste(params$output_folder, "rladies_meetup_groups.csv", sep="/"),
+                                stringsAsFactors = FALSE)
+
+```
+
+
+## Topic R-Ladies
+
+```{r find_group_by_topic}
+meetup_groups_topic <- read.csv(paste(params$output_folder, "rladies_meetup_groups_topic.csv", sep="/"),
+                                stringsAsFactors = FALSE)
+```
+
+
+## Text search "R-Ladies"
+
+A text search for "rladies" did not return any results. Including the tech category id (34) excludes extra results.
+
+```{r find_group_by_text}
+meetup_groups_text <- read.csv(paste(params$output_folder, "rladies_meetup_groups_text.csv", sep="/"),
+                                stringsAsFactors = FALSE)
+```
+
+## R-Ladies Missing Topic
+
+Naughty groups!
+
+```{r groups_missing_topic}
+
+# group + organizer to contact
+meetups_missing_topic <- meetup_groups_text %>% anti_join(meetup_groups_topic, by="id")
+
+meetups_missing_topic %>% filter(str_detect(name, "[Rr]([ -]?)[Ll]adies")) %>%
+  arrange(-members) %>% 
+  select(name, localized_location, organizer.name, members, created)
+
+```
+
+
+## Proposed Metric - Need Topic
+
+Identify R-Ladies Meetups that are not using the R-Ladies topics so we can ask them to add it to their Meetup.
+
+# Meetup Activity
+
+Identifying which groups are regularly scheduling Meetups will help us to see who is the most active. Groups with gaps in Meetup activity or with no events should be highlighted so we can reach out to their organizers. 
+
+## Past Events
+
+```{r group_events_past, eval=FALSE}
+
+meetup_groups <- read.csv(paste(params$output_folder, "rladies_meetup_groups.csv", sep="/"))
+
+past_events_query_params <- list(
+  key=params$meetup_api_key, 
+  sign=TRUE,
+  page=200,
+  status="past",
+  fields=paste("comment_count", "photo_album", sep=", ")
+)
+
+dir.create(file.path(paste(params$output_folder, "rladies_meetup_events", sep="/")))
+
+meetup_events_past <- data_frame()
+
+for (n in 1:nrow(meetup_groups)) {
+  events_url <- meetup_groups[n,]["events_url"]
+  print(paste("Trying url:", events_url$events_url))
+  meetups <- get_meetups(events_url$events_url, past_events_query_params)
+  if(length(meetups)== 0) {
+    next()
+  }
+
+  meetups <- meetups %>% mutate(photo_album.photo_sample=NA)
+  meetup_events_past <- bind_rows(meetup_events_past, meetups)
+  write.csv(meetup_events_past, paste0(params$output_folder, "/rladies_meetup_events/_meetup_events_past_", n, ".csv"),
+            row.names = FALSE, na = "")
+}
+
+
+write.csv(meetup_events_past, "rladies_meetup_events_past.csv", row.names = FALSE, na = "")
+```
+
+## Event Interval
+
+How much time passes between the Meetup events? Are some groups regularly meeting every month? What is the typical time interval between Meetup groups?
+
+## Proposed Metric - Meetup Event Interval
+
+## Proposed Meetup - Meetup Event Frequency
+
+# Upcoming Meetups
+
+```{r group_events_future, eval=FALSE}
+
+meetup_groups <- read.csv(paste(params$output_folder, "rladies_meetup_groups.csv", sep="/"))
+
+future_events_query_params <- list(
+  key=params$meetup_api_key, 
+  sign=TRUE,
+  page=200,
+  status="upcoming",
+  fields=paste("comment_count", "photo_album", sep=", ")
+)
+
+dir.create(file.path(paste(params$output_folder, "rladies_meetup_events", sep="/")))
+
+#meetup_events_future <- data_frame()
+
+for (n in 1:nrow(meetup_groups)) {
+  events_url <- meetup_groups[n,]["events_url"]
+  print(paste("Trying url:", events_url$events_url))
+  meetups <- get_meetups(events_url$events_url, future_events_query_params)
+
+  if(length(meetups)== 0) {
+    next()
+  }
+
+  meetups <- meetups %>% mutate(photo_album.photo_sample=NA)
+  meetup_events_future <- bind_rows(meetup_events_future, meetups)
+  write.csv(meetup_events_future, 
+            paste0(params$output_folder, "/rladies_meetup_events/_meetup_events_future_", n, ".csv"),
+            row.names = FALSE, na = "")
+}
+
+write.csv(meetup_events_future, paste(params$output_folder, "rladies_meetup_events_future.csv", sep="/"), 
+          row.names = FALSE, na = "")
+```
+
+### Upcoming Events Endpoint
+
+Meetup provides an upcoming_events endpoint that is convenient but may not be comprehensive. Let's use it and compare our results to the group by group approach above.
+
+```{r upcoming_events, eval=FALSE}
+find_upcoming_url <- "https://api.meetup.com/find/upcoming_events"
+
+# change to get upcoming meetups for all meetups in the list
+events_query_params <- list(
+  key=params$meetup_api_key, 
+  sign=TRUE,
+  page=200,
+  order="time",
+  radius="global")
+
+get_group_events <- function (url, query) {
+  req <- GET(url, query=query)
+  print(paste(req$url))
+  json <- content(req, as = "text")
+  groups <- fromJSON(json, flatten=TRUE)
+  return(groups$events)
+}
+
+# I tried "topic" but no R-Ladies results were returned, so this field doesn't apply
+meetup_events_text <- get_group_events(find_upcoming_url, append(events_query_params, c(text="rladies")))
+
+# just in case anything slipped in there
+meetup_events_upcoming <- meetup_events_text %>% filter(str_detect(group.name, "[Rr](-?)[Ll]adies"))
+                                          
+write.csv(meetup_events_upcoming, paste(params$output_folder, "rladies_meetup_upcoming_events.csv", sep="/"), row.names = FALSE, na = "")
+
+```
+
+### Upcoming Events Endpoint vs Fetch per Group
+
+The Upcoming Events endpoint appears to be pretty limited in what it returns.
+
+```{r upcoming_vs_future}
+
+meetup_events_upcoming <- read.csv(paste(params$output_folder, "rladies_meetup_upcoming_events.csv", sep="/"),
+                                   stringsAsFactors = FALSE)
+meetup_events_upcoming <- meetup_events_upcoming %>% mutate(id=as.character(id))
+
+meetup_events_future <- read.csv(paste(params$output_folder, "rladies_meetup_events_future.csv", sep="/"),
+                                   stringsAsFactors = FALSE)
+meetup_events_future <- meetup_events_future %>% mutate(id=as.character(id))
+
+meetup_events_missing <- meetup_events_future %>% anti_join(meetup_events_upcoming, by="id") %>% unique()
+
+meetup_events_missing %>% arrange(local_date) %>% select(group.name, name, local_date)
+
+```
+
+### Missing Groups
+
+The upcoming_events endpoint could be useful as a check for any groups that were missed via the find groups endpoint. This should be zero, but if anything shows up, it could be worth double checking the group!
+
+```{r missing_groups}
+meetup_events_future <- read.csv(paste(params$output_folder, "rladies_meetup_events_future.csv", sep="/"), 
+                                 stringsAsFactors = FALSE)
+meetup_events_upcoming <- read.csv(paste(params$output_folder, "rladies_meetup_upcoming_events.csv", sep="/"),
+                                   stringsAsFactors = FALSE)
+
+meetup_events_future <- meetup_events_future %>% mutate(id=as.character(id))
+meetup_events_upcoming <- meetup_events_upcoming %>% mutate(id=as.character(id))
+
+not_in_groups <- meetup_events_upcoming %>% anti_join(meetup_events_future, by="id")
+
+# check group id
+missing_groups <- meetup_events_upcoming %>% anti_join(meetup_groups, by=c("group.name"="name")) 
+
+missing_groups
+
+```
+
+## Proposed Metric - Upcoming Meetups
+
+A list/report of upcoming meetups
+
+# Membership
+
+How can we best determine Meetup membership? While counting members may not be the best estimate, considering RSVP's may shed more light on this. Not everyone who RSVP's actually shows up, so we may want to look at RSVP trends to determine a better way to adjust the count. 
+
+## RSVPs per Meetup
+
+Overall RSVPS per Meetup per group (over time)
+
+## RSVP Density
+
+Member RSVP Density per group (how often to members repeatedly RSVP)
+
+## RSVP Proportion
+
+% of events RSVP'ed per member -> rounded and summed - 1/1 = 1, 3/6 = .5, 4/4 = 1
+^^ filter low # meetups
+
+## Membership vs RSVPs
+
+How do # members compare to RSVP patterns?
+
+## Proposed Metric - Membership Density
+
+While it won't give us an accurate number of members, it will show changes over time
+
+# Characteristics of High Membership Meetups
+
+Considering the proposed metrics, what features do more "successful" Meetups have? Maybe this could serve as a guide for Meetup organizers!
+
+## Meeting Frequency
+
+## RSVP Trends
+
+## Relationship to City Demographics
+
+
