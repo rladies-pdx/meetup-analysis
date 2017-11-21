@@ -162,7 +162,7 @@ for (n in 1:nrow(meetup_groups)) {
 }
 
 
-write.csv(meetup_events_past, "rladies_meetup_events_past.csv", row.names = FALSE, na = "")
+write.csv(meetup_events_past, paste(params$output_folder,"rladies_meetup_events_past.csv", sep="/"), row.names = FALSE, na = "")
 ```
 
 ## Event Interval
