@@ -16,7 +16,9 @@ library(dplyr)
 library(ggmap)
 library(httr)
 library(jsonlite)
+library(maps)
 library(purrr)
+library(reshape2)
 library(stringr)
 library(tidyr)
 ```
@@ -174,6 +176,175 @@ get_rladies_past <- function (folder) {
 }
 
 ```
+
+```{r read_past_events}
+meetup_events_past <- read.csv(paste(params$output_folder,"rladies_meetup_events_past.csv", sep="/"),
+                               stringsAsFactors = FALSE)
+
+meetup_groups <- read.csv(paste(params$output_folder, "rladies_meetup_groups.csv", sep="/"),
+                                stringsAsFactors = FALSE)
+
+meetup_events_past_merge <- meetup_events_past %>% 
+  inner_join(meetup_groups %>% 
+               select(urlname, city, country, state, members, timezone),
+             by=c("group.urlname"="urlname")) %>%
+  separate(timezone, c("region"), extra="drop", fill="left") %>%
+  mutate(group.created=as.POSIXct(group.created/1000, origin="1970-01-01"))
+```
+
+
+## Event Frequency
+
+How many events has each meetup had?
+
+```{r past_events_freq}
+past_events_freq <- meetup_events_past_merge %>% 
+  group_by(group.name) %>% 
+  summarise(num_events=n(),
+            lat=first(group.lat), lon=first(group.lon), 
+            location=first(group.localized_location),
+            country=first(country),
+            state=first(state),
+            city=first(city),
+            members=first(members),
+            region=first(region)) %>%
+  mutate(num_events_log = round(log(num_events))) %>%
+  group_by(num_events_log) %>%
+  mutate(events_min_max = ifelse(min(num_events) == max(num_events), 
+                                 paste(min(num_events)),
+                                 paste(min(num_events), "-", max(num_events))))
+
+```
+
+```{r past_events_freq_hist}
+
+ggplot(past_events_freq, aes(x=reorder(location, num_events), y=num_events)) +
+  geom_bar(stat="identity", aes(fill=region)) +
+  coord_flip()
+
+```
+
+```{r past_events_freq_map}
+ggplot(data=past_events_freq, 
+       aes(x=lon, y=lat, size=num_events_log, colour=reorder(events_min_max, num_events_log))) +
+  borders("world", colour="gray50", fill="gray50") +
+  geom_point() +
+  scale_color_discrete(name="Events") +
+  scale_size_continuous(guide=FALSE)
+
+ggplot(data=past_events_freq %>% filter(region=="US"), 
+       aes(x=lon, y=lat, size=num_events_log, colour=reorder(events_min_max, num_events_log))) +
+  borders("usa", colour="gray50", fill="gray50") +
+  geom_point() +
+  scale_color_discrete(name="Events") +
+  scale_size_continuous(guide=FALSE)
+
+ggplot(data=past_events_freq %>% filter(region=="Europe"), 
+       aes(x=lon, y=lat, size=num_events_log, colour=reorder(events_min_max, num_events_log))) +
+  borders("world", colour="gray50", fill="gray50", xlim = c(-20, 59), ylim = c(35, 71)) +
+  geom_point() +
+  scale_color_discrete(name="Events") +
+  scale_size_continuous(guide=FALSE)
+```
+
+## Event Frequency Density
+
+```{r}
+ggplot(past_events_freq, aes(x=reorder(events_min_max, num_events_log))) + 
+  geom_density() +
+  xlab("Events per Meetup (Log)")
+```
+
+
+
+## Meetup Age by First Event
+
+What is the "age" of meetups based on their first event?
+
+```{r, message=FALSE, warning=FALSE}
+
+past_event_age <- meetup_events_past_merge %>%
+  group_by(group.name) %>%
+  summarise(first_meetup = min(local_date, na.rm=FALSE),
+            location=first(group.localized_location),
+            region=first(region),
+            group.created=first(group.created)) %>%
+  mutate(first_meetup=ifelse(first_meetup=="", NA, first_meetup),
+         first_meetup_age=ceiling(as.numeric(difftime(as.Date("2017-12-01"), first_meetup, units="days"))),
+         location=reorder(location, first_meetup_age))
+
+ggplot(past_event_age, aes(x=location, y=first_meetup_age)) +
+  geom_bar(stat="identity", aes(fill=region)) +
+  coord_flip()
+
+```
+
+## First Meetup vs Created
+
+```{r, message=FALSE, warning=FALSE}
+created_vs_first <- past_event_age %>%
+  mutate(
+    group_age = ceiling(as.numeric(difftime(as.Date("2017-12-01"), group.created, units="days"))),
+    created_interval=ceiling(as.numeric(difftime(first_meetup, group.created, units="days"))),
+    location=reorder(location, -created_interval))
+
+ggplot(created_vs_first, aes(x=location, y=created_interval)) +
+  geom_bar(stat="identity", aes(fill=region)) +
+  coord_flip()
+
+```
+
+```{r, message=FALSE, warning=FALSE}
+created_vs_first_melt <- created_vs_first %>% 
+  mutate(location=reorder(location,group_age)) %>%
+  select(location, group_age, created_interval) %>% 
+  melt()
+
+ggplot(created_vs_first_melt, aes(x=location, y=value)) +
+  geom_bar(stat="identity", aes(fill=variable)) +
+  coord_flip()
+```
+
+## Event RSVPs
+
+How many people RSVP to the meetups?
+
+```{r, message=FALSE}
+past_rsvps <- meetup_events_past_merge %>%
+  group_by(group.name) %>%
+  mutate(
+    yes_rsvp_pct = round(yes_rsvp_count/members, 2),
+    yes_rsvp_log = round(log(yes_rsvp_count))
+  ) %>%
+  group_by(group.name, yes_rsvp_log) %>%
+  mutate(yes_rsvp_log_freq = n()) %>%
+  ungroup() %>%
+  group_by(group.name, yes_rsvp_pct) %>%
+  mutate(yes_rsvp_pct_freq = n())
+
+past_rsvp_freq <- past_rsvps %>% 
+  group_by(group.name) %>% 
+  summarize(num_events=n(),
+            rsvps_sum = sum(yes_rsvp_count),
+            rsvps_med = round(median(yes_rsvp_count)),
+            rsvps_min = min(yes_rsvp_count),
+            rsvps_max = max(yes_rsvp_count),
+            rsvps_mode = yes_rsvp_log[which.max(yes_rsvp_log_freq)],
+            rsvps_pct_mode = yes_rsvp_pct[which.max(yes_rsvp_pct_freq)],
+            lat=first(group.lat), lon=first(group.lon), 
+            location=first(group.localized_location),
+            country=first(country),
+            state=first(state),
+            city=first(city),
+            members=first(members),
+            region=first(region)) %>%
+  mutate(location=reorder(location,members))
+
+ggplot(past_rsvp_freq, aes(x=location, y=rsvps_pct_mode)) +
+  geom_bar(stat="identity") + 
+  coord_flip()
+```
+
 
 ## Event Interval
 
