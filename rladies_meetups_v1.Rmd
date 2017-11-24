@@ -16,6 +16,7 @@ library(dplyr)
 library(ggmap)
 library(httr)
 library(jsonlite)
+library(lubridate)
 library(maps)
 library(purrr)
 library(reshape2)
@@ -189,7 +190,9 @@ meetup_events_past_merge <- meetup_events_past %>%
                select(urlname, city, country, state, members, timezone),
              by=c("group.urlname"="urlname")) %>%
   separate(timezone, c("region"), extra="drop", fill="left") %>%
-  mutate(group.created=as.POSIXct(group.created/1000, origin="1970-01-01"))
+  mutate(
+    group.created=as.POSIXct(group.created/1000, origin="1970-01-01"),
+    created=as.POSIXct(created/1000, origin="1970-01-01"))
 ```
 
 
@@ -224,7 +227,11 @@ ggplot(past_events_freq, aes(x=reorder(location, num_events), y=num_events)) +
 
 ```
 
-```{r past_events_freq_map}
+
+```{r past_events_freq_map, eval=FALSE}
+
+# TODO: knit() doesn't like something here.
+
 ggplot(data=past_events_freq, 
        aes(x=lon, y=lat, size=num_events_log, colour=reorder(events_min_max, num_events_log))) +
   borders("world", colour="gray50", fill="gray50") +
@@ -245,6 +252,7 @@ ggplot(data=past_events_freq %>% filter(region=="Europe"),
   geom_point() +
   scale_color_discrete(name="Events") +
   scale_size_continuous(guide=FALSE)
+
 ```
 
 ## Event Frequency Density
@@ -304,47 +312,6 @@ ggplot(created_vs_first_melt, aes(x=location, y=value)) +
   geom_bar(stat="identity", aes(fill=variable)) +
   coord_flip()
 ```
-
-## Event RSVPs
-
-How many people RSVP to the meetups?
-
-```{r, message=FALSE}
-past_rsvps <- meetup_events_past_merge %>%
-  group_by(group.name) %>%
-  mutate(
-    yes_rsvp_pct = round(yes_rsvp_count/members, 2),
-    yes_rsvp_log = round(log(yes_rsvp_count))
-  ) %>%
-  group_by(group.name, yes_rsvp_log) %>%
-  mutate(yes_rsvp_log_freq = n()) %>%
-  ungroup() %>%
-  group_by(group.name, yes_rsvp_pct) %>%
-  mutate(yes_rsvp_pct_freq = n())
-
-past_rsvp_freq <- past_rsvps %>% 
-  group_by(group.name) %>% 
-  summarize(num_events=n(),
-            rsvps_sum = sum(yes_rsvp_count),
-            rsvps_med = round(median(yes_rsvp_count)),
-            rsvps_min = min(yes_rsvp_count),
-            rsvps_max = max(yes_rsvp_count),
-            rsvps_mode = yes_rsvp_log[which.max(yes_rsvp_log_freq)],
-            rsvps_pct_mode = yes_rsvp_pct[which.max(yes_rsvp_pct_freq)],
-            lat=first(group.lat), lon=first(group.lon), 
-            location=first(group.localized_location),
-            country=first(country),
-            state=first(state),
-            city=first(city),
-            members=first(members),
-            region=first(region)) %>%
-  mutate(location=reorder(location,members))
-
-ggplot(past_rsvp_freq, aes(x=location, y=rsvps_pct_mode)) +
-  geom_bar(stat="identity") + 
-  coord_flip()
-```
-
 
 ## Event Interval
 
@@ -481,9 +448,111 @@ A list/report of upcoming meetups
 
 How can we best determine Meetup membership? While counting members may not be the best estimate, considering RSVP's may shed more light on this. Not everyone who RSVP's actually shows up, so we may want to look at RSVP trends to determine a better way to adjust the count. 
 
+## RSVP Frequency
+
+How many people RSVP to the meetups?
+
+```{r}
+past_rsvps <- meetup_events_past_merge %>%
+  group_by(group.name) %>%
+  mutate(
+    yes_rsvp_pct = round(yes_rsvp_count/members, 2), # Problem: based on current membership, not membership at the time
+    yes_rsvp_log = round(log(yes_rsvp_count)),
+    event_month=month(created, label=TRUE),
+    event_ym=format(created, "%Y-%m-01")
+  ) %>%
+  group_by(group.name, yes_rsvp_log) %>%
+  mutate(yes_rsvp_log_freq = n()) %>%
+  ungroup() %>%
+  group_by(group.name, yes_rsvp_pct) %>%
+  mutate(yes_rsvp_pct_freq = n())
+
+past_rsvp_summary <- past_rsvps %>% 
+  group_by(event_ym, group.name) %>%
+  summarise(yes_rsvp_sum_grp=sum(yes_rsvp_count), region=first(region))
+  
+
+ggplot(past_rsvp_summary, aes(x=event_ym, y=yes_rsvp_sum_grp)) +
+  geom_bar(stat="identity", aes(fill=region))+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+
+```{r, message=FALSE}
+
+past_rsvp_freq <- past_rsvps %>% 
+  group_by(group.name) %>% 
+  summarize(num_events=n(),
+            rsvps_sum = sum(yes_rsvp_count),
+            rsvps_med = round(median(yes_rsvp_count)),
+            rsvps_min = min(yes_rsvp_count),
+            rsvps_max = max(yes_rsvp_count),
+            rsvps_mode = yes_rsvp_log[which.max(yes_rsvp_log_freq)],
+            rsvps_pct_mode = yes_rsvp_pct[which.max(yes_rsvp_pct_freq)],
+            lat=first(group.lat), lon=first(group.lon), 
+            location=first(group.localized_location),
+            country=first(country),
+            state=first(state),
+            city=first(city),
+            members=first(members),
+            region=first(region)) %>%
+  mutate(location=reorder(location, members))
+
+
+ggplot(past_rsvp_freq, aes(x=location, y=rsvps_pct_mode)) +
+  geom_bar(stat="identity", aes(fill=region)) + 
+  coord_flip()
+```
+
 ## RSVPs per Meetup
 
 Overall RSVPS per Meetup per group (over time)
+
+```{r}
+
+past_rsvps_month_curr <- past_rsvps %>%
+  filter(str_detect(local_date, "2017"))
+
+ggplot(past_rsvps_month_curr, aes(x=event_month, y=yes_rsvp_count)) +
+  geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location), show.legend = FALSE) +
+  facet_wrap(~ region, scales="free")
+
+ggplot(past_rsvps_month_curr %>% filter(region %in% c("US", "Canada")), aes(x=event_month, y=yes_rsvp_count)) +
+  geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location))
+
+ggplot(past_rsvps_month_curr %>% filter(region=="Europe"), aes(x=event_month, y=yes_rsvp_count)) +
+  geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location))
+
+ggplot(past_rsvps_month_curr %>% filter(region %in% c("Australia", "Asia", "Africa")), aes(x=event_month, y=yes_rsvp_count)) +
+  geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location))
+
+ggplot(past_rsvps_month_curr %>% filter(region=="America"), aes(x=event_month, y=yes_rsvp_count)) +
+  geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location))
+
+```
+
+Percent RSVPs - depends on total membership which only reports an overall total, not the total at the time of the event.
+
+```{r}
+
+ggplot(past_rsvps_month_curr, aes(x=event_month, y=yes_rsvp_pct)) +
+  geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location), show.legend = FALSE) +
+  facet_wrap(~ region, scales="free")
+
+ggplot(past_rsvps_month_curr %>% filter(region %in% c("US", "Canada")), aes(x=event_month, y=yes_rsvp_pct)) +
+  geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location))
+
+ggplot(past_rsvps_month_curr %>% filter(region=="Europe"), aes(x=event_month, y=yes_rsvp_pct)) +
+  geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location))
+
+ggplot(past_rsvps_month_curr %>% filter(region %in% c("Australia", "Asia", "Africa")), aes(x=event_month, y=yes_rsvp_pct)) +
+  geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location))
+
+ggplot(past_rsvps_month_curr %>% filter(region=="America"), aes(x=event_month, y=yes_rsvp_pct)) +
+  geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location))
+
+```
+
 
 ## RSVP Density
 
