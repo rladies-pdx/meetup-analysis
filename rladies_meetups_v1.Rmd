@@ -1,10 +1,12 @@
 ---
 title: "R-Ladies Meetups"
 author: "Augustina Ragwitz"
-date: "November 20, 2017"
-output: html_document
+date: "November 28, 2017"
+output: 
+  html_document:
+    toc: true
 params:
-  meetup_api_key: !r Sys.getenv("API_KEY_MEETUP")
+  meetup_api_key: !r Sys.getenv("API_KEY_MEETUP_RLADIES")
   archive_folder: !r Sys.Date()
   output_folder: "latest"
 ---
@@ -13,16 +15,31 @@ params:
 knitr::opts_chunk$set(echo = TRUE)
 
 library(dplyr)
-library(ggmap)
+library(ggplot2)
 library(httr)
 library(jsonlite)
 library(lubridate)
 library(maps)
 library(purrr)
+library(readr)
 library(reshape2)
 library(stringr)
 library(tidyr)
 ```
+
+# Overview
+
+R-Ladies has developed a package called MeetupR to streamline Meetup analysis. The goal of this notebook is to call the Meetup API directly to document API calls and parameters, then compare the results to the MeetupR implementation. If there are possible improvements then patches will be proposed!
+
+Additionally it would be great to have a dynamic dashboard that shows Meetup stats so we can get the latest and greatest for conference presentations.
+
+## Repo Link
+
+https://github.com/rladies-pdx/meetup-analysis
+
+# Data Collection
+
+## Meetup API Setup
 
 ```{r globals}
 dir.create(file.path(params$output_folder))
@@ -36,18 +53,7 @@ get_meetups <- function (url, query) {
 }
 ```
 
-
-# Overview
-
-R-Ladies has developed a package called MeetupR to streamline Meetup analysis. The goal of this notebook is to call the Meetup API directly to document API calls and parameters, then compare the results to the MeetupR implementation. If there are possible improvements then patches will be proposed!
-
-Additionally it would be great to have a dynamic dashboard that shows Meetup stats so we can get the latest and greatest for conference presentations.
-
-## Repo Link
-
-https://github.com/rladies-pdx/meetup-analysis
-
-# Meetup Groups
+## Meetup Groups
 
 Identifying Meetup groups should be straightforward because R-Ladies exists as a Meetup topic. Unfortunately not every group is using this topic. This uses the "find_groups" function from the Meetup API.
 
@@ -74,34 +80,319 @@ get_rladies_groups <- function (folder) {
   
   meetup_groups <- meetup_groups %>%
     mutate(events_url = paste("https://api.meetup.com/", urlname, "/events", sep="")) %>%
-    select(-meta_category.category_ids) # csv writer thinks this is a list
+    select(-meta_category.category_ids) # remove lists
   
-  write.csv(meetup_groups, paste(folder, "rladies_meetup_groups.csv", sep="/"), row.names = FALSE, na = "")
-  write.csv(meetup_groups_topic %>% select(-meta_category.category_ids), 
+  write_csv(meetup_groups, paste(folder, "rladies_meetup_groups.csv", sep="/"), 
+            na = "")
+  write_csv(meetup_groups_topic %>% select(-meta_category.category_ids), 
             paste(folder, "rladies_meetup_groups_topic.csv", sep="/"), 
-            row.names = FALSE, na = "")
-  write.csv(meetup_groups_text %>% select(-meta_category.category_ids), 
+            na = "")
+  write_csv(meetup_groups_text %>% select(-meta_category.category_ids), 
             paste(folder, "rladies_meetup_groups_text.csv", sep="/"), 
-            row.names = FALSE, na = "")
+            na = "")
 }
 
+```
 
+I created an account and subscribed it to the found groups. This checks that it is subscribed to all current groups. A future version of this should attempt to join via the Meetup API (depends on join questions).
+
+```{r self_groups}
+
+get_self_groups <- function (folder) {
+  
+  groups_url <- "https://api.meetup.com/self/groups"
+
+  groups_query_params <- list(
+    key=params$meetup_api_key, 
+    sign=TRUE,
+    page=200,
+    fields="approved")
+  
+  self_groups <- get_meetups(groups_url, groups_query_params)
+  
+  self_groups <- self_groups %>%
+    mutate(events_url = paste("https://api.meetup.com/", urlname, "/events", sep="")) %>%
+    select(-meta_category.category_ids) # remove lists
+  
+  write_csv(self_groups, paste(folder, "rladies_self_groups.csv", sep="/"), 
+            na = "")
+}
 
 ```
 
-```{r meetup_groups}
 
-meetup_groups <- read.csv(paste(params$output_folder, "rladies_meetup_groups.csv", sep="/"),
-                                stringsAsFactors = FALSE)
+## Group Members
+
+Names and other common identifying information about members has been removed. We are only interested in identifying unique members across groups and events, not who they are.
+
+```{r group_members}
+
+get_rladies_members <- function (folder) {
+  
+  groups_url <- "https://api.meetup.com/find/groups"
+
+  groups_query_params <- list(
+    key=params$meetup_api_key, 
+    sign=TRUE,
+    page=200,
+    radius="global")
+  
+  # by topic
+  meetup_groups_topic <- get_meetups(groups_url, append(groups_query_params, c(topic_id=1513883, order="members")))
+  
+  # by text + category
+  meetup_groups_text <- get_meetups(groups_url, append(groups_query_params, c(text="r-ladies", category=34)))
+  
+  meetup_groups_aggr <- bind_rows(meetup_groups_topic, meetup_groups_text %>% anti_join(meetup_groups_topic, by="id"))
+  meetup_groups <- meetup_groups_aggr %>% filter(str_detect(name, "[Rr]([ -]?)[Ll]adies"))
+  
+  meetup_groups <- meetup_groups %>%
+    mutate(events_url = paste("https://api.meetup.com/", urlname, "/events", sep="")) %>%
+    select(-meta_category.category_ids) # csv writer thinks this is a list
+  
+  write_csv(meetup_groups, paste(folder, "rladies_meetup_groups.csv", sep="/"),
+            na = "")
+  write_csv(meetup_groups_topic %>% select(-meta_category.category_ids), 
+            paste(folder, "rladies_meetup_groups_topic.csv", sep="/"), 
+            na = "")
+  write_csv(meetup_groups_text %>% select(-meta_category.category_ids), 
+            paste(folder, "rladies_meetup_groups_text.csv", sep="/"), 
+            na = "")
+}
 
 ```
 
+## Upcoming Events
+
+### Calendar
+
+Depends on querying account being a member of the meetups.
+
+```{r self_calendar}
+
+get_rladies_calendar <- function (folder) {
+  calendar_url <- "https://api.meetup.com/self/calendar"
+  
+  events_query_params <- list(
+    key=params$meetup_api_key, 
+    sign=TRUE,
+    page=200,
+    order="time",
+    radius="global")
+  
+  get_events <- function (url, query) {
+    req <- GET(url, query=query)
+    print(paste(req$url))
+    json <- content(req, as = "text")
+    events <- fromJSON(json, flatten=TRUE)
+    return(events)
+  }
+
+  meetup_events_calendar <- get_events(calendar_url, events_query_params)
+  
+  write_csv(meetup_events_calendar, paste(folder, "rladies_meetup_calendar.csv", sep="/"), 
+            na = "")
+  return(meetup_events_calendar)
+}
+
+```
+
+### Per Group Query
+
+Per group query - note that this gets throttled so here it is limited to groups the querying account does not have membership to.
+
+```{r group_events_future}
+
+get_rladies_future <- function (meetup_groups, folder) {
+
+  future_events_query_params <- list(
+    key=params$meetup_api_key, 
+    sign=TRUE,
+    page=200,
+    status="upcoming",
+    fields=paste("comment_count", "photo_album", sep=", ")
+  )
+  
+  dir.create(file.path(paste(folder, "rladies_meetup_events", sep="/")))
+  
+  meetup_events_future <- data_frame()
+  
+  for (n in 1:nrow(meetup_groups)) {
+    events_url <- meetup_groups[n,]["events_url"]
+    print(paste("Trying url:", events_url$events_url))
+    meetups <- get_meetups(events_url$events_url, future_events_query_params)
+  
+    if(length(meetups)== 0) {
+      next()
+    }
+  
+    meetups <- meetups %>% mutate(photo_album.photo_sample=NA)
+    meetup_events_future <- bind_rows(meetup_events_future, meetups)
+    write_csv(meetup_events_future, 
+              paste0(folder, "/rladies_meetup_events/_meetup_events_future_", n, ".csv"),
+              na = "")
+  }
+  
+  write_csv(meetup_events_future, paste(folder, "rladies_meetup_events_future.csv", sep="/"), 
+            na = "")
+  return(meetup_events_future)
+}
+```
+
+### Upcoming Events Endpoint
+
+Meetup provides an upcoming_events endpoint that is convenient but may not be comprehensive. Let's use it and compare our results to the group by group approach above.
+
+```{r upcoming_events}
+
+get_rladies_upcoming <- function (folder) {
+  find_upcoming_url <- "https://api.meetup.com/find/upcoming_events"
+  
+  # change to get upcoming meetups for all meetups in the list
+  events_query_params <- list(
+    key=params$meetup_api_key, 
+    sign=TRUE,
+    page=200,
+    order="time",
+    radius="global")
+  
+  get_group_events <- function (url, query) {
+    req <- GET(url, query=query)
+    print(paste(req$url))
+    json <- content(req, as = "text")
+    groups <- fromJSON(json, flatten=TRUE)
+    return(groups$events)
+  }
+  
+  # I tried "topic" but no R-Ladies results were returned, so this field doesn't apply
+  meetup_events_text <- get_group_events(find_upcoming_url, append(events_query_params, c(text="rladies")))
+  
+  # just in case anything slipped in there
+  meetup_events_upcoming <- meetup_events_text %>% filter(str_detect(group.name, "[Rr](-?)[Ll]adies"))
+                                            
+  write_csv(meetup_events_upcoming, paste(folder, "rladies_meetup_upcoming_events.csv", sep="/"), 
+            na = "")
+  
+  return(meetup_events_upcoming)
+}
+
+```
+
+## Past Events
+
+Get all past events for all groups. This call is expensive and gets throttled.
+
+```{r group_events_past, eval=FALSE}
+
+# TODO this currently throttles out and has to be manipulated manually to run
+get_rladies_past_all <- function (folder) {}
+
+folder=params$archive_folder
+meetup_groups <- read_csv(paste(folder, "rladies_meetup_groups.csv", sep="/"))
+
+past_events_query_params <- list(
+  key=params$meetup_api_key, 
+  sign=TRUE,
+  page=200,
+  status="past",
+  fields=paste("comment_count", "photo_album", sep=", ")
+)
+
+dir.create(file.path(paste(folder, "rladies_meetup_events", sep="/")))
+
+meetup_events_past <- data_frame()
+
+for (n in 52:nrow(meetup_groups)) {
+  events_url <- meetup_groups[n,]["events_url"]
+  print(paste("Trying url:", events_url$events_url))
+  meetups <- get_meetups(events_url$events_url, past_events_query_params)
+  if(length(meetups)== 0) {
+    next()
+  }
+
+  meetups <- meetups %>% mutate(photo_album.photo_sample=NA)
+  meetup_events_past <- bind_rows(meetup_events_past, meetups)
+  write_csv(meetup_events_past, paste0(folder, "/rladies_meetup_events/_meetup_events_past_", n, ".csv"),
+            na = "")
+}
+
+write_csv(meetup_events_past, paste(folder,"rladies_meetup_events_past.csv", sep="/"), 
+          na = "")
+```
+
+Combine the previous past events pull for a group with the previous upcoming events pull where the event has occurred in the past. If all previous upcoming events occurred in the past, then we'll need to pull past events for the group depending on the time interval.
+
+Check this against the updated group list to find any groups that need all events pulled. Only pull all events for those groups.
+
+```{r group_events_past_v2}
+
+get_rladies_past <- function() {
+  # TODO
+}
+
+```
+
+## Get Latest
+
+Create a new archive folder and get the latest data.
+
+```{r get_latest_data, eval=FALSE}
+
+dir.create(file.path(params$archive_folder))
+
+# TODO add try/catch for throttling
+get_rladies_groups(params$archive_folder)
+get_self_groups(params$archive_folder)
+get_rladies_upcoming(params$archive_folder)
+
+meetup_events_calendar <- get_rladies_calendar(params$archive_folder)
+meetup_events_future <- get_rladies_future(pending_groups, params$archive_folder)
+
+meetup_events_current <- bind_rows(meetup_events_future, meetup_events_calendar)
+write_csv(meetup_events_current, paste(params$archive_folder,"rladies_meetup_events_current.csv", sep="/"), 
+          na = "")
+
+system2("rm", args = c("-r", params$output_folder))
+system2("cp", args = c("-R", paste(params$archive_folder), paste(params$output_folder)))
+
+```
+
+
+# Meetup Groups
+
+```{r meetup_groups, message=FALSE}
+meetup_groups <- read_csv(paste(params$output_folder, "rladies_meetup_groups.csv", sep="/"))
+```
+
+## Group Membership Check
+
+Check group membership for the retrieval account.
+
+```{r check_self_groups, message=FALSE}
+self_groups <- read_csv(paste(params$output_folder, "rladies_self_groups.csv", sep="/"))
+
+pending_groups <- meetup_groups %>% 
+  anti_join(self_groups, by="id") %>% 
+  select(id, name, join_mode, link, events_url) %>%
+  arrange(join_mode)
+```
+
+All Pending Groups:
+
+```{r pending_groups}
+pending_groups
+```
+
+Pending Groups Not Requiring Approval:
+
+```{r pending_groups_approval}
+pending_groups %>% filter(join_mode != "approval")
+```
 
 ## Topic R-Ladies
 
-```{r find_group_by_topic}
-meetup_groups_topic <- read.csv(paste(params$output_folder, "rladies_meetup_groups_topic.csv", sep="/"),
-                                stringsAsFactors = FALSE)
+```{r find_group_by_topic, message=FALSE}
+meetup_groups_topic <- read_csv(paste(params$output_folder, "rladies_meetup_groups_topic.csv", sep="/"))
 ```
 
 
@@ -109,9 +400,8 @@ meetup_groups_topic <- read.csv(paste(params$output_folder, "rladies_meetup_grou
 
 A text search for "rladies" did not return any results. Including the tech category id (34) excludes extra results.
 
-```{r find_group_by_text}
-meetup_groups_text <- read.csv(paste(params$output_folder, "rladies_meetup_groups_text.csv", sep="/"),
-                                stringsAsFactors = FALSE)
+```{r find_group_by_text, message=FALSE}
+meetup_groups_text <- read_csv(paste(params$output_folder, "rladies_meetup_groups_text.csv", sep="/"))
 ```
 
 ## R-Ladies Missing Topic
@@ -134,56 +424,22 @@ meetups_missing_topic %>% filter(str_detect(name, "[Rr]([ -]?)[Ll]adies")) %>%
 
 Identify R-Ladies Meetups that are not using the R-Ladies topics so we can ask them to add it to their Meetup.
 
+# Meetup Members
+
+Membership numbers only show the current totals. To track membership over time we need to see when members joined the group. Additionally, we are interested in discovering repeat RSVPs as well as common group membership.
+
 # Meetup Activity
 
 Identifying which groups are regularly scheduling Meetups will help us to see who is the most active. Groups with gaps in Meetup activity or with no events should be highlighted so we can reach out to their organizers. 
 
 ## Past Events
 
-```{r group_events_past}
+```{r read_past_events, message=FALSE}
+meetup_events_past <- read_csv(paste(params$output_folder,"rladies_meetup_events_past.csv", sep="/"))
 
-get_rladies_past <- function (folder) {
-  meetup_groups <- read.csv(paste(folder, "rladies_meetup_groups.csv", sep="/"))
-  
-  past_events_query_params <- list(
-    key=params$meetup_api_key, 
-    sign=TRUE,
-    page=200,
-    status="past",
-    fields=paste("comment_count", "photo_album", sep=", ")
-  )
-  
-  dir.create(file.path(paste(folder, "rladies_meetup_events", sep="/")))
-  
-  meetup_events_past <- data_frame()
-  
-  for (n in 1:nrow(meetup_groups)) {
-    events_url <- meetup_groups[n,]["events_url"]
-    print(paste("Trying url:", events_url$events_url))
-    meetups <- get_meetups(events_url$events_url, past_events_query_params)
-    if(length(meetups)== 0) {
-      next()
-    }
-  
-    meetups <- meetups %>% mutate(photo_album.photo_sample=NA)
-    meetup_events_past <- bind_rows(meetup_events_past, meetups)
-    write.csv(meetup_events_past, paste0(folder, "/rladies_meetup_events/_meetup_events_past_", n, ".csv"),
-              row.names = FALSE, na = "")
-  }
-  
-  
-  write.csv(meetup_events_past, paste(folder,"rladies_meetup_events_past.csv", sep="/"), 
-            row.names = FALSE, na = "")
-}
+meetup_groups <- read_csv(paste(params$output_folder, "rladies_meetup_groups.csv", sep="/"))
 
-```
-
-```{r read_past_events}
-meetup_events_past <- read.csv(paste(params$output_folder,"rladies_meetup_events_past.csv", sep="/"),
-                               stringsAsFactors = FALSE)
-
-meetup_groups <- read.csv(paste(params$output_folder, "rladies_meetup_groups.csv", sep="/"),
-                                stringsAsFactors = FALSE)
+# TODO use lubridate
 
 meetup_events_past_merge <- meetup_events_past %>% 
   inner_join(meetup_groups %>% 
@@ -194,7 +450,6 @@ meetup_events_past_merge <- meetup_events_past %>%
     group.created=as.POSIXct(group.created/1000, origin="1970-01-01"),
     created=as.POSIXct(created/1000, origin="1970-01-01"))
 ```
-
 
 ## Event Frequency
 
@@ -230,28 +485,7 @@ ggplot(past_events_freq, aes(x=reorder(location, num_events), y=num_events)) +
 
 ```{r past_events_freq_map, eval=FALSE}
 
-# TODO: knit() doesn't like something here.
-
-ggplot(data=past_events_freq, 
-       aes(x=lon, y=lat, size=num_events_log, colour=reorder(events_min_max, num_events_log))) +
-  borders("world", colour="gray50", fill="gray50") +
-  geom_point() +
-  scale_color_discrete(name="Events") +
-  scale_size_continuous(guide=FALSE)
-
-ggplot(data=past_events_freq %>% filter(region=="US"), 
-       aes(x=lon, y=lat, size=num_events_log, colour=reorder(events_min_max, num_events_log))) +
-  borders("usa", colour="gray50", fill="gray50") +
-  geom_point() +
-  scale_color_discrete(name="Events") +
-  scale_size_continuous(guide=FALSE)
-
-ggplot(data=past_events_freq %>% filter(region=="Europe"), 
-       aes(x=lon, y=lat, size=num_events_log, colour=reorder(events_min_max, num_events_log))) +
-  borders("world", colour="gray50", fill="gray50", xlim = c(-20, 59), ylim = c(35, 71)) +
-  geom_point() +
-  scale_color_discrete(name="Events") +
-  scale_size_continuous(guide=FALSE)
+# TODO: error when using maps - Error: ggplot2 doesn't know how to deal with data of class list
 
 ```
 
@@ -262,8 +496,6 @@ ggplot(past_events_freq, aes(x=reorder(events_min_max, num_events_log))) +
   geom_density() +
   xlab("Events per Meetup (Log)")
 ```
-
-
 
 ## Meetup Age by First Event
 
@@ -276,9 +508,8 @@ past_event_age <- meetup_events_past_merge %>%
   summarise(first_meetup = min(local_date, na.rm=FALSE),
             location=first(group.localized_location),
             region=first(region),
-            group.created=first(group.created)) %>%
-  mutate(first_meetup=ifelse(first_meetup=="", NA, first_meetup),
-         first_meetup_age=ceiling(as.numeric(difftime(as.Date("2017-12-01"), first_meetup, units="days"))),
+            group.created=first(group.created))  %>%
+  mutate(first_meetup_age=ceiling(as.numeric(difftime(as.Date("2017-12-01"), first_meetup, units="days"))),
          location=reorder(location, first_meetup_age))
 
 ggplot(past_event_age, aes(x=location, y=first_meetup_age)) +
@@ -290,6 +521,9 @@ ggplot(past_event_age, aes(x=location, y=first_meetup_age)) +
 ## First Meetup vs Created
 
 ```{r, message=FALSE, warning=FALSE}
+
+# TODO use lubridate
+
 created_vs_first <- past_event_age %>%
   mutate(
     group_age = ceiling(as.numeric(difftime(as.Date("2017-12-01"), group.created, units="days"))),
@@ -317,102 +551,31 @@ ggplot(created_vs_first_melt, aes(x=location, y=value)) +
 
 How much time passes between the Meetup events? Are some groups regularly meeting every month? What is the typical time interval between Meetup groups?
 
+```{r event_interval}
+
+# TODO use lubridate
+
+```
+
+
 ## Proposed Metric - Meetup Event Interval
 
 ## Proposed Meetup - Meetup Event Frequency
 
 # Upcoming Meetups
 
-```{r group_events_future}
-
-get_rladies_future <- function (folder) {
-  meetup_groups <- read.csv(paste(params$output_folder, "rladies_meetup_groups.csv", sep="/"))
-  
-  future_events_query_params <- list(
-    key=params$meetup_api_key, 
-    sign=TRUE,
-    page=200,
-    status="upcoming",
-    fields=paste("comment_count", "photo_album", sep=", ")
-  )
-  
-  dir.create(file.path(paste(folder, "rladies_meetup_events", sep="/")))
-  
-  meetup_events_future <- data_frame()
-  
-  for (n in 1:nrow(meetup_groups)) {
-    events_url <- meetup_groups[n,]["events_url"]
-    print(paste("Trying url:", events_url$events_url))
-    meetups <- get_meetups(events_url$events_url, future_events_query_params)
-  
-    if(length(meetups)== 0) {
-      next()
-    }
-  
-    meetups <- meetups %>% mutate(photo_album.photo_sample=NA)
-    meetup_events_future <- bind_rows(meetup_events_future, meetups)
-    write.csv(meetup_events_future, 
-              paste0(folder, "/rladies_meetup_events/_meetup_events_future_", n, ".csv"),
-              row.names = FALSE, na = "")
-  }
-  
-  write.csv(meetup_events_future, paste(folder, "rladies_meetup_events_future.csv", sep="/"), 
-            row.names = FALSE, na = "")
-}
-```
-
-### Upcoming Events Endpoint
-
-Meetup provides an upcoming_events endpoint that is convenient but may not be comprehensive. Let's use it and compare our results to the group by group approach above.
-
-```{r upcoming_events}
-
-get_rladies_upcoming <- function (folder) {
-  find_upcoming_url <- "https://api.meetup.com/find/upcoming_events"
-  
-  # change to get upcoming meetups for all meetups in the list
-  events_query_params <- list(
-    key=params$meetup_api_key, 
-    sign=TRUE,
-    page=200,
-    order="time",
-    radius="global")
-  
-  get_group_events <- function (url, query) {
-    req <- GET(url, query=query)
-    print(paste(req$url))
-    json <- content(req, as = "text")
-    groups <- fromJSON(json, flatten=TRUE)
-    return(groups$events)
-  }
-  
-  # I tried "topic" but no R-Ladies results were returned, so this field doesn't apply
-  meetup_events_text <- get_group_events(find_upcoming_url, append(events_query_params, c(text="rladies")))
-  
-  # just in case anything slipped in there
-  meetup_events_upcoming <- meetup_events_text %>% filter(str_detect(group.name, "[Rr](-?)[Ll]adies"))
-                                            
-  write.csv(meetup_events_upcoming, paste(folder, "rladies_meetup_upcoming_events.csv", sep="/"), 
-            row.names = FALSE, na = "")
-}
-
-```
-
 ### Upcoming Events Endpoint vs Fetch per Group
 
 The Upcoming Events endpoint appears to be pretty limited in what it returns.
 
-```{r upcoming_vs_future}
+```{r upcoming_vs_future, message=FALSE, warning=FALSE}
 
-meetup_events_upcoming <- read.csv(paste(params$output_folder, "rladies_meetup_upcoming_events.csv", sep="/"),
-                                   stringsAsFactors = FALSE)
+meetup_events_upcoming <- read_csv(paste(params$output_folder, "rladies_meetup_upcoming_events.csv", sep="/"))
 meetup_events_upcoming <- meetup_events_upcoming %>% mutate(id=as.character(id))
 
-meetup_events_future <- read.csv(paste(params$output_folder, "rladies_meetup_events_future.csv", sep="/"),
-                                   stringsAsFactors = FALSE)
-meetup_events_future <- meetup_events_future %>% mutate(id=as.character(id))
+meetup_events_current <- read_csv(paste(params$output_folder, "rladies_meetup_events_current.csv", sep="/"))
 
-meetup_events_missing <- meetup_events_future %>% anti_join(meetup_events_upcoming, by="id") %>% unique()
+meetup_events_missing <- meetup_events_current %>% anti_join(meetup_events_upcoming, by="id") %>% unique()
 
 meetup_events_missing %>% arrange(local_date) %>% select(group.name, name, local_date)
 
@@ -422,16 +585,14 @@ meetup_events_missing %>% arrange(local_date) %>% select(group.name, name, local
 
 The upcoming_events endpoint could be useful as a check for any groups that were missed via the find groups endpoint. This should be zero, but if anything shows up, it could be worth double checking the group!
 
-```{r missing_groups}
-meetup_events_future <- read.csv(paste(params$output_folder, "rladies_meetup_events_future.csv", sep="/"), 
-                                 stringsAsFactors = FALSE)
-meetup_events_upcoming <- read.csv(paste(params$output_folder, "rladies_meetup_upcoming_events.csv", sep="/"),
-                                   stringsAsFactors = FALSE)
+```{r missing_groups, message=FALSE}
+meetup_events_current <- read_csv(paste(params$output_folder, "rladies_meetup_events_current.csv", sep="/"))
+meetup_events_upcoming <- read_csv(paste(params$output_folder, "rladies_meetup_upcoming_events.csv", sep="/"))
 
-meetup_events_future <- meetup_events_future %>% mutate(id=as.character(id))
+meetup_events_current <- meetup_events_current %>% mutate(id=as.character(id))
 meetup_events_upcoming <- meetup_events_upcoming %>% mutate(id=as.character(id))
 
-not_in_groups <- meetup_events_upcoming %>% anti_join(meetup_events_future, by="id")
+not_in_groups <- meetup_events_upcoming %>% anti_join(meetup_events_current, by="id")
 
 # check group id
 missing_groups <- meetup_events_upcoming %>% anti_join(meetup_groups, by=c("group.name"="name")) 
@@ -452,14 +613,14 @@ How can we best determine Meetup membership? While counting members may not be t
 
 How many people RSVP to the meetups?
 
-```{r}
+```{r, past_rsvp_summary}
 past_rsvps <- meetup_events_past_merge %>%
   group_by(group.name) %>%
   mutate(
     yes_rsvp_pct = round(yes_rsvp_count/members, 2), # Problem: based on current membership, not membership at the time
     yes_rsvp_log = round(log(yes_rsvp_count)),
     event_month=month(created, label=TRUE),
-    event_ym=format(created, "%Y-%m-01")
+    event_ym=format(created, "%Y-%m-01") # TODO use lubridate
   ) %>%
   group_by(group.name, yes_rsvp_log) %>%
   mutate(yes_rsvp_log_freq = n()) %>%
@@ -470,7 +631,9 @@ past_rsvps <- meetup_events_past_merge %>%
 past_rsvp_summary <- past_rsvps %>% 
   group_by(event_ym, group.name) %>%
   summarise(yes_rsvp_sum_grp=sum(yes_rsvp_count), region=first(region))
-  
+```
+
+```{r past_rsvp_summary_plot}
 
 ggplot(past_rsvp_summary, aes(x=event_ym, y=yes_rsvp_sum_grp)) +
   geom_bar(stat="identity", aes(fill=region))+
@@ -478,7 +641,7 @@ ggplot(past_rsvp_summary, aes(x=event_ym, y=yes_rsvp_sum_grp)) +
 ```
 
 
-```{r, message=FALSE}
+```{r past_rsvp_freq, message=FALSE}
 
 past_rsvp_freq <- past_rsvps %>% 
   group_by(group.name) %>% 
@@ -496,19 +659,24 @@ past_rsvp_freq <- past_rsvps %>%
             city=first(city),
             members=first(members),
             region=first(region)) %>%
-  mutate(location=reorder(location, members))
+  mutate(location=reorder(location, -members))
+```
 
+```{r past_rsvp_freq_plot}
 
 ggplot(past_rsvp_freq, aes(x=location, y=rsvps_pct_mode)) +
   geom_bar(stat="identity", aes(fill=region)) + 
   coord_flip()
+
 ```
 
 ## RSVPs per Meetup
 
 Overall RSVPS per Meetup per group (over time)
 
-```{r}
+```{r rsvps_per_meetup}
+
+# TODO use lubridate
 
 past_rsvps_month_curr <- past_rsvps %>%
   filter(str_detect(local_date, "2017"))
@@ -533,7 +701,7 @@ ggplot(past_rsvps_month_curr %>% filter(region=="America"), aes(x=event_month, y
 
 Percent RSVPs - depends on total membership which only reports an overall total, not the total at the time of the event.
 
-```{r}
+```{r rsvps_pct_per_meetup}
 
 ggplot(past_rsvps_month_curr, aes(x=event_month, y=yes_rsvp_pct)) +
   geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location), show.legend = FALSE) +
@@ -561,6 +729,7 @@ Member RSVP Density per group (how often to members repeatedly RSVP)
 ## RSVP Proportion
 
 % of events RSVP'ed per member -> rounded and summed - 1/1 = 1, 3/6 = .5, 4/4 = 1
+
 ^^ filter low # meetups
 
 ## Membership vs RSVPs
@@ -581,26 +750,9 @@ Considering the proposed metrics, what features do more "successful" Meetups hav
 
 ## Relationship to City Demographics
 
-# Appendix
+# Conclusions
 
-## Latest
-
-Create a new archive folder and get the latest data.
-
-```{r get_latest_data, eval=FALSE}
-
-dir.create(file.path(params$archive_folder))
-
-# TODO add try/catch for throttling
-get_rladies_groups(params$archive_folder)
-get_rladies_past(params$archive_folder)
-get_rladies_upcoming(params$archive_folder)
-get_rladies_future(params$archive_folder)
-
-system2("rm", args = c(params$output_folder))
-system2("cp", args = c("-R", params$archive_folder, params$output_folder))
-
-```
+If any...
 
 
 
