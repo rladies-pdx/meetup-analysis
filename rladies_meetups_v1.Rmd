@@ -432,16 +432,16 @@ meetup_events_past <- read_csv(paste(params$output_folder,"rladies_meetup_events
 
 meetup_groups <- read_csv(paste(params$output_folder, "rladies_meetup_groups.csv", sep="/"))
 
-# TODO use lubridate
-
 meetup_events_past_merge <- meetup_events_past %>% 
   inner_join(meetup_groups %>% 
                select(urlname, city, country, state, members, timezone),
              by=c("group.urlname"="urlname")) %>%
-  separate(timezone, c("region"), extra="drop", fill="left") %>%
+  separate(timezone, c("region"), extra="drop", fill="left")
+
+meetup_events_past_merge <- meetup_events_past_merge %>%
   mutate(
-    group.created=as.POSIXct(group.created/1000, origin="1970-01-01"),
-    created=as.POSIXct(created/1000, origin="1970-01-01"))
+    group.created=as.POSIXct(group.created/1000, tz="UTC", origin="1970-01-01"),
+    created=as.POSIXct(created/1000, tz="UTC", origin="1970-01-01"))
 ```
 
 ## Event Frequency
@@ -494,33 +494,41 @@ ggplot(past_events_freq, aes(x=reorder(events_min_max, num_events_log))) +
 
 What is the "age" of meetups based on their first event?
 
-```{r, message=FALSE, warning=FALSE}
+```{r meetup_first_event, message=FALSE, warning=FALSE}
 
 past_event_age <- meetup_events_past_merge %>%
   group_by(group.name) %>%
-  summarise(first_meetup = min(local_date, na.rm=FALSE),
+  summarise(first_meetup = as_datetime(min(local_date, na.rm=FALSE)),
             location=first(group.localized_location),
             region=first(region),
             group.created=first(group.created))  %>%
-  mutate(first_meetup_age=ceiling(as.numeric(difftime(as.Date("2017-12-01"), first_meetup, units="days"))),
+  mutate(first_meetup_age=difftime(as_datetime("2017-12-01"), first_meetup, unit="days"),
          location=reorder(location, first_meetup_age))
+```
+
+```{r meetup_first_event_plot}
 
 ggplot(past_event_age, aes(x=location, y=first_meetup_age)) +
   geom_bar(stat="identity", aes(fill=region)) +
-  coord_flip()
+  coord_flip() +
+  scale_y_continuous(breaks = pretty(past_event_age$first_meetup_age, n = 10)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  xlab("R-Ladies City") +
+  ylab("Days Since First Meetup")
+
 
 ```
 
 ## First Meetup vs Created
 
-```{r, message=FALSE, warning=FALSE}
+```{r first_meetup_vs_created, message=FALSE, warning=FALSE}
 
 # TODO use lubridate
 
 created_vs_first <- past_event_age %>%
   mutate(
-    group_age = ceiling(as.numeric(difftime(as.Date("2017-12-01"), group.created, units="days"))),
-    created_interval=ceiling(as.numeric(difftime(first_meetup, group.created, units="days"))),
+    group_age = difftime(as_datetime("2017-12-01"), group.created, units="days"),
+    created_interval=difftime(first_meetup, group.created, units="days"),
     location=reorder(location, -created_interval))
 
 ggplot(created_vs_first, aes(x=location, y=created_interval)) +
@@ -546,9 +554,97 @@ How much time passes between the Meetup events? Are some groups regularly meetin
 
 ```{r event_interval}
 
-# TODO use lubridate
+event_intervals <- meetup_events_past_merge %>%
+  group_by(group.name) %>%
+  arrange(local_date) %>%
+  mutate(
+    prev_event = lag(local_date),
+    days_between = difftime(local_date, prev_event, unit="days")
+  ) %>%
+  select(group.name, group.localized_location, region, days_between, local_date, prev_event, id)
 
 ```
+
+```{r event_interval_plot}
+
+event_intervals_curr <- event_intervals %>% filter(local_date > as_datetime("2016-01-01"))
+
+ggplot(event_intervals_curr, aes(x=local_date, y=days_between)) +
+  geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location), show.legend = FALSE)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  scale_y_continuous() +
+  scale_x_date(date_breaks = "1 month") +
+  facet_wrap(~ region, scales="free")
+
+ggplot(event_intervals_curr %>% filter(region %in% c("US", "Canada")), aes(x=local_date, y=days_between)) +
+  geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  scale_y_continuous() +
+  scale_x_date(date_breaks = "1 month")
+
+ggplot(event_intervals_curr %>% filter(region=="Europe"), aes(x=local_date, y=days_between)) +
+  geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  scale_y_continuous() +
+  scale_x_date(date_breaks = "1 month")
+
+ggplot(event_intervals_curr %>% filter(region %in% c("Australia", "Asia", "Africa")), aes(x=local_date, y=days_between)) +
+  geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  scale_y_continuous() +
+  scale_x_date(date_breaks = "1 month")
+
+ggplot(event_intervals_curr %>% filter(region=="America"), aes(x=local_date, y=days_between)) +
+  geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  scale_y_continuous() +
+  scale_x_date(date_breaks = "1 month")
+
+```
+
+```{r event_interval_summary}
+
+event_intervals_summary <- event_intervals_curr %>%
+  group_by(group.name) %>%
+  mutate(num_meetups = n()) %>%
+  filter(!is.na(days_between)) %>%
+  mutate(days_between_log = round(log(as.numeric(days_between + 1)))) %>%
+  group_by(days_between_log) %>%
+  mutate(days_between_min_max = ifelse(min(days_between) == max(days_between), 
+                                 paste(min(days_between)),
+                                 paste(min(days_between), "-", max(days_between)))) %>%
+  group_by(group.name, days_between_log) %>%
+  summarise(
+    days_between_freq = n(),
+    days_between_min = min(days_between),
+    days_between_max = max(days_between),
+    num_meetups = first(num_meetups),
+    days_between_min_max = first(days_between_min_max),
+    location = first(group.localized_location),
+    region = first(region)
+  )
+
+# TODO freq % -> # meetups in days between bucket / total # meetups
+
+# which.max just returns one row, we want all max rows
+event_intervals_summary_top <- event_intervals_summary %>%
+  group_by(group.name) %>%
+  slice(which(days_between_freq == max(days_between_freq)))
+```
+
+```{r event_interval_summary_plot}
+
+event_intervals_summary_top <- event_intervals_summary_top %>%
+  mutate(days_between_min_max=)
+
+ggplot(event_intervals_summary_top, aes(x=reorder(location, num_meetups), y=reorder(days_between_min_max, days_between_log))) +
+  geom_bar(stat="identity", position="dodge", aes(fill=region)) +
+  coord_flip()
+  
+
+```
+
+
 
 # Upcoming Meetups
 
