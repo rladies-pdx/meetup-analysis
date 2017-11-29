@@ -357,7 +357,6 @@ system2("cp", args = c("-R", paste(params$archive_folder), paste(params$output_f
 
 ```
 
-
 # Meetup Groups
 
 ```{r meetup_groups, message=FALSE}
@@ -395,7 +394,6 @@ pending_groups %>% filter(join_mode != "approval")
 meetup_groups_topic <- read_csv(paste(params$output_folder, "rladies_meetup_groups_topic.csv", sep="/"))
 ```
 
-
 ## Text search "R-Ladies"
 
 A text search for "rladies" did not return any results. Including the tech category id (34) excludes extra results.
@@ -418,11 +416,6 @@ meetups_missing_topic %>% filter(str_detect(name, "[Rr]([ -]?)[Ll]adies")) %>%
   select(name, localized_location, organizer.name, members, created)
 
 ```
-
-
-## Proposed Metric - Need Topic
-
-Identify R-Ladies Meetups that are not using the R-Ladies topics so we can ask them to add it to their Meetup.
 
 # Meetup Members
 
@@ -557,11 +550,6 @@ How much time passes between the Meetup events? Are some groups regularly meetin
 
 ```
 
-
-## Proposed Metric - Meetup Event Interval
-
-## Proposed Meetup - Meetup Event Frequency
-
 # Upcoming Meetups
 
 ### Upcoming Events Endpoint vs Fetch per Group
@@ -600,10 +588,6 @@ missing_groups <- meetup_events_upcoming %>% anti_join(meetup_groups, by=c("grou
 missing_groups
 
 ```
-
-## Proposed Metric - Upcoming Meetups
-
-A list/report of upcoming meetups
 
 # Membership
 
@@ -736,23 +720,25 @@ Member RSVP Density per group (how often to members repeatedly RSVP)
 
 How do # members compare to RSVP patterns?
 
-## Proposed Metric - Membership Density
-
-While it won't give us an accurate number of members, it will show changes over time
-
-# Characteristics of High Membership Meetups
-
-Considering the proposed metrics, what features do more "successful" Meetups have? Maybe this could serve as a guide for Meetup organizers!
-
-## Meeting Frequency
-
-## RSVP Trends
-
-## Relationship to City Demographics
-
 # Conclusions
 
-If any...
+## Proposed Metrics
+
+### Needs Topic
+
+Identify R-Ladies Meetups that are not using the R-Ladies topics so we can ask them to add it to their Meetup.
+
+### Meetup Event Interval
+
+### Meetup Event Frequency
+
+### Upcoming Meetups
+
+A list/report of upcoming meetups
+
+### Membership Density
+
+While it won't give us an accurate number of members, it will show changes over time
 
 
 
