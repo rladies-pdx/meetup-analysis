@@ -1,0 +1,16 @@
+---
+title: "R-Ladies Successful Meetups"
+author: "Augustina Ragwitz"
+date: "November 28, 2017"
+output: html_document
+---
+
+# Characteristics of High Membership Meetups
+
+Considering the proposed metrics, what features do more "successful" Meetups have? Maybe this could serve as a guide for Meetup organizers!
+
+## Meeting Frequency
+
+## RSVP Trends
+
+## Relationship to City Demographics
