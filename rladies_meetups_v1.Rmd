@@ -90,6 +90,7 @@ get_rladies_groups <- function (folder) {
   write_csv(meetup_groups_text %>% select(-meta_category.category_ids), 
             paste(folder, "rladies_meetup_groups_text.csv", sep="/"), 
             na = "")
+  return(meetup_groups)
 }
 
 ```
@@ -116,6 +117,8 @@ get_self_groups <- function (folder) {
   
   write_csv(self_groups, paste(folder, "rladies_self_groups.csv", sep="/"), 
             na = "")
+  
+  return(self_groups)
 }
 
 ```
@@ -127,37 +130,44 @@ Names and other common identifying information about members has been removed. W
 
 ```{r group_members}
 
-get_rladies_members <- function (folder) {
+get_rladies_members <- function (meetup_groups, folder) {
   
-  groups_url <- "https://api.meetup.com/find/groups"
-
-  groups_query_params <- list(
+  future_events_query_params <- list(
     key=params$meetup_api_key, 
     sign=TRUE,
     page=200,
-    radius="global")
+    status="upcoming",
+    fields=paste("comment_count", "photo_album", sep=", ")
+  )
   
-  # by topic
-  meetup_groups_topic <- get_meetups(groups_url, append(groups_query_params, c(topic_id=1513883, order="members")))
+  dir.create(file.path(paste(folder, "rladies_meetup_events", sep="/")))
   
-  # by text + category
-  meetup_groups_text <- get_meetups(groups_url, append(groups_query_params, c(text="r-ladies", category=34)))
+  meetup_events_future <- data_frame()
   
-  meetup_groups_aggr <- bind_rows(meetup_groups_topic, meetup_groups_text %>% anti_join(meetup_groups_topic, by="id"))
-  meetup_groups <- meetup_groups_aggr %>% filter(str_detect(name, "[Rr]([ -]?)[Ll]adies"))
+  # for 1: length of groups
+  # url = url + /members/
+  # for 1: ceiling(number of members/200) <- returns 200 at a time
+  # make sure to remove columns with identifying info
+  for (n in 1:nrow(meetup_groups)) {
+    events_url <- meetup_groups[n,]["events_url"]
+    print(paste("Trying url:", events_url$events_url))
+    meetups <- get_meetups(events_url$events_url, future_events_query_params)
   
-  meetup_groups <- meetup_groups %>%
-    mutate(events_url = paste("https://api.meetup.com/", urlname, "/events", sep="")) %>%
-    select(-meta_category.category_ids) # csv writer thinks this is a list
+    if(length(meetups)== 0) {
+      next()
+    }
   
-  write_csv(meetup_groups, paste(folder, "rladies_meetup_groups.csv", sep="/"),
+    meetups <- meetups %>% mutate(photo_album.photo_sample=NA)
+    meetup_events_future <- bind_rows(meetup_events_future, meetups)
+    write_csv(meetup_events_future, 
+              paste0(folder, "/rladies_meetup_events/_meetup_events_future_", n, ".csv"),
+              na = "")
+  }
+  
+  write_csv(meetup_events_future, paste(folder, "rladies_meetup_events_future.csv", sep="/"), 
             na = "")
-  write_csv(meetup_groups_topic %>% select(-meta_category.category_ids), 
-            paste(folder, "rladies_meetup_groups_topic.csv", sep="/"), 
-            na = "")
-  write_csv(meetup_groups_text %>% select(-meta_category.category_ids), 
-            paste(folder, "rladies_meetup_groups_text.csv", sep="/"), 
-            na = "")
+  return(meetup_members)
+
 }
 
 ```
@@ -239,6 +249,7 @@ get_rladies_future <- function (meetup_groups, folder) {
 }
 ```
 
+
 ### Upcoming Events Endpoint
 
 Meetup provides an upcoming_events endpoint that is convenient but may not be comprehensive. Let's use it and compare our results to the group by group approach above.
@@ -302,7 +313,7 @@ dir.create(file.path(paste(folder, "rladies_meetup_events", sep="/")))
 
 meetup_events_past <- data_frame()
 
-for (n in 52:nrow(meetup_groups)) {
+for (n in 1:nrow(meetup_groups)) {
   events_url <- meetup_groups[n,]["events_url"]
   print(paste("Trying url:", events_url$events_url))
   meetups <- get_meetups(events_url$events_url, past_events_query_params)
@@ -318,6 +329,11 @@ for (n in 52:nrow(meetup_groups)) {
 
 write_csv(meetup_events_past, paste(folder,"rladies_meetup_events_past.csv", sep="/"), 
           na = "")
+
+# copy entire archive folder to latest, don't try to manage individual file updates
+system2("rm", args = c("-r", params$output_folder))
+system2("cp", args = c("-R", paste(params$archive_folder), paste(params$output_folder)))
+
 ```
 
 Combine the previous past events pull for a group with the previous upcoming events pull where the event has occurred in the past. If all previous upcoming events occurred in the past, then we'll need to pull past events for the group depending on the time interval.
@@ -341,10 +357,13 @@ Create a new archive folder and get the latest data.
 dir.create(file.path(params$archive_folder))
 
 # TODO add try/catch for throttling
-get_rladies_groups(params$archive_folder)
-get_self_groups(params$archive_folder)
-get_rladies_upcoming(params$archive_folder)
+meetup_groups <- get_rladies_groups(params$archive_folder)
+self_groups <- get_self_groups(params$archive_folder)
 
+pending_groups <- meetup_groups %>% 
+  anti_join(self_groups, by="id")
+
+get_rladies_upcoming(params$archive_folder)
 meetup_events_calendar <- get_rladies_calendar(params$archive_folder)
 meetup_events_future <- get_rladies_future(pending_groups, params$archive_folder)
 
@@ -370,7 +389,7 @@ Check group membership for the retrieval account.
 ```{r check_self_groups, message=FALSE}
 self_groups <- read_csv(paste(params$output_folder, "rladies_self_groups.csv", sep="/"))
 
-pending_groups <- meetup_groups %>% 
+ pending_groups <- meetup_groups %>% 
   anti_join(self_groups, by="id") %>% 
   select(id, name, join_mode, link, events_url) %>%
   arrange(join_mode)
@@ -522,8 +541,6 @@ ggplot(past_event_age, aes(x=location, y=first_meetup_age)) +
 ## First Meetup vs Created
 
 ```{r first_meetup_vs_created, message=FALSE, warning=FALSE}
-
-# TODO use lubridate
 
 created_vs_first <- past_event_age %>%
   mutate(
@@ -756,10 +773,8 @@ Overall RSVPS per Meetup per group (over time)
 
 ```{r rsvps_per_meetup}
 
-# TODO use lubridate
-
 past_rsvps_month_curr <- past_rsvps %>%
-  filter(str_detect(local_date, "2017"))
+  filter(str_detect(local_date, "2017")) # TODO can we use lubridate here?
 
 ggplot(past_rsvps_month_curr, aes(x=event_month, y=yes_rsvp_count)) +
   geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location), show.legend = FALSE) +
