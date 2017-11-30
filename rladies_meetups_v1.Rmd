@@ -354,6 +354,64 @@ get_rladies_past <- function() {
 
 ```
 
+## Past Events RSVPs
+
+Get a list of member id's that RSVP'ed to past meetups.
+
+```{r past_member_rsvps, eval=FALSE}
+
+base_url <- "https://api.meetup.com"
+
+folder=params$archive_folder
+meetup_events_past <- read_csv(paste(params$output_folder,"rladies_meetup_events_past.csv", sep="/"))
+
+member_rsvps_query_params <- list(
+  key=params$meetup_api_key, 
+  sign=TRUE,
+  response="yes"
+)
+
+dir.create(file.path(paste(folder, "rladies_member_rsvps", sep="/")))
+
+# meetup_member_rsvps <- data_frame()
+
+for (n in 322:nrow(meetup_events_past)) {
+  rsvps_url <- paste(base_url, meetup_events_past[n,]["group.urlname"], "events", meetup_events_past[n,]["id"], "rsvps", 
+                     sep="/")
+  print(paste("Trying url:", rsvps_url))
+  
+  rsvps <- get_meetups(rsvps_url, member_rsvps_query_params)
+  
+  if(length(rsvps)== 0) {
+    next()
+  }
+  
+  if("errors" %in% names(rsvps)) {
+    print(paste(n, ":", rsvps$errors))
+    break()
+  }
+
+  rsvps <- rsvps %>% 
+    select(member.id, created, updated, member.event_context.host, event.yes_rsvp_count, event.id, group.name) %>%
+    mutate(member_rsvps = n())
+
+  meetup_member_rsvps <- bind_rows(meetup_member_rsvps, rsvps)
+  write_csv(meetup_member_rsvps, paste0(folder, "/rladies_member_rsvps/_meetup_member_rsvps_", n, ".csv"),
+            na = "")
+}
+
+write_csv(meetup_member_rsvps, paste(folder,"rladies_member_rsvps.csv", sep="/"), 
+            na = "")
+
+# copy entire archive folder to latest, don't try to manage individual file updates
+# system2("rm", args = c("-r", params$output_folder))
+# system2("cp", args = c("-R", paste(params$archive_folder), paste(params$output_folder)))
+
+
+
+```
+
+
 ## Get Latest
 
 Create a new archive folder and get the latest data.

@@ -39,4 +39,5 @@ vignettes/*.pdf
 # Data dump folders for reconstructing or debugging api calls
 rladies_meetup_events/
 rladies_members/
+rladies_member_rsvps/
 
