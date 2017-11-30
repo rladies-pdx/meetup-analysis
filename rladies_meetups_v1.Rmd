@@ -128,47 +128,53 @@ get_self_groups <- function (folder) {
 
 Names and other common identifying information about members has been removed. We are only interested in identifying unique members across groups and events, not who they are.
 
-```{r group_members}
+```{r group_members, eval=FALSE}
 
-get_rladies_members <- function (meetup_groups, folder) {
+# get_rladies_members <- function (meetup_groups, folder)
+
+folder <- params$archive_folder
   
-  future_events_query_params <- list(
+  members_query_params <- list(
     key=params$meetup_api_key, 
     sign=TRUE,
     page=200,
-    status="upcoming",
-    fields=paste("comment_count", "photo_album", sep=", ")
+    fields=paste("memberships", "topics", "gender", sep=",") # these can only go with individual profile calls
   )
   
-  dir.create(file.path(paste(folder, "rladies_meetup_events", sep="/")))
+  dir.create(file.path(paste(folder, "rladies_members", sep="/")))
   
-  meetup_events_future <- data_frame()
+  meetup_members <- data_frame()
   
-  # for 1: length of groups
-  # url = url + /members/
-  # for 1: ceiling(number of members/200) <- returns 200 at a time
-  # make sure to remove columns with identifying info
   for (n in 1:nrow(meetup_groups)) {
-    events_url <- meetup_groups[n,]["events_url"]
-    print(paste("Trying url:", events_url$events_url))
-    meetups <- get_meetups(events_url$events_url, future_events_query_params)
+    members_url <- str_replace(meetup_groups[n,]["events_url"], "events", "members")
+    num_members <- as.numeric(meetup_groups[n,]["members"])
+    for (i in 1:ceiling(num_members/200)) {
+      print(paste("Trying url:", members_url))
+      members <- get_meetups(members_url, append(members_query_params, c(offset=i)))
   
-    if(length(meetups)== 0) {
-      next()
+      if(length(members)== 0) {
+        next()
+      }
+      
+      # remove identifying info
+      members <- members %>%
+        select(-name)
+      
+      members$group_profile.answers <- NULL
+
+      meetup_members <- bind_rows(meetup_members, members)
+      write_csv(meetup_members, 
+                paste0(folder, "/rladies_members/_meetup_members_", n, ".csv"),
+                na = "")
     }
-  
-    meetups <- meetups %>% mutate(photo_album.photo_sample=NA)
-    meetup_events_future <- bind_rows(meetup_events_future, meetups)
-    write_csv(meetup_events_future, 
-              paste0(folder, "/rladies_meetup_events/_meetup_events_future_", n, ".csv"),
-              na = "")
   }
   
-  write_csv(meetup_events_future, paste(folder, "rladies_meetup_events_future.csv", sep="/"), 
-            na = "")
-  return(meetup_members)
+  # remove identifying info
+  meetup_members <- meetup_members %>% 
+    select(-group_profile.intro, -bio, -email, -group_profile.title)
 
-}
+  write_csv(meetup_members, paste(folder, "rladies_meetup_members.csv", sep="/"), 
+            na = "")
 
 ```
 
@@ -371,10 +377,15 @@ meetup_events_current <- bind_rows(meetup_events_future, meetup_events_calendar)
 write_csv(meetup_events_current, paste(params$archive_folder,"rladies_meetup_events_current.csv", sep="/"), 
           na = "")
 
+```
+
+```{r copy_archive_to_latest, eval=FALSE}
+
 system2("rm", args = c("-r", params$output_folder))
 system2("cp", args = c("-R", paste(params$archive_folder), paste(params$output_folder)))
 
 ```
+
 
 # Meetup Groups
 
