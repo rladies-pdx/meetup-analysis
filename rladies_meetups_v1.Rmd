@@ -507,6 +507,24 @@ meetups_missing_topic %>% filter(str_detect(name, "[Rr]([ -]?)[Ll]adies")) %>%
 
 Membership numbers only show the current totals. To track membership over time we need to see when members joined the group. Additionally, we are interested in discovering repeat RSVPs as well as common group membership.
 
+## Historical Membership
+
+Determine number of members over time based on when members joined the group.
+
+```{r historical_membership}
+
+```
+
+
+## Member RSVP Proportions
+
+What proportion of events has each member RSVP'ed to? What are the general trends in each group?
+
+```{r rsvp_proportion}
+
+```
+
+
 # Meetup Activity
 
 Identifying which groups are regularly scheduling Meetups will help us to see who is the most active. Groups with gaps in Meetup activity or with no events should be highlighted so we can reach out to their organizers. 
@@ -632,9 +650,18 @@ ggplot(created_vs_first_melt, aes(x=location, y=value)) +
   coord_flip()
 ```
 
+## No First Meetup
+
+What groups have yet to have a first meetup?
+
+```{r}
+
+```
+
+
 ## Event Interval
 
-How much time passes between the Meetup events? Are some groups regularly meeting every month? What is the typical time interval between Meetup groups?
+How much time passes between the Meetup events? Are some groups regularly meeting every month? What is the typical time between Meetup groups?
 
 ```{r event_interval}
 
@@ -727,6 +754,15 @@ ggplot(event_intervals_summary_top, aes(x=reorder(location, num_meetups), y=reor
   
 
 ```
+
+# Event Cadence
+
+Related to intervals above. In a given time period, how many meetups does each group have?
+
+```{r event_cadence}
+
+```
+
 
 
 
