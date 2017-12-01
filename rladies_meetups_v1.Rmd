@@ -404,10 +404,8 @@ write_csv(meetup_member_rsvps, paste(folder,"rladies_member_rsvps.csv", sep="/")
             na = "")
 
 # copy entire archive folder to latest, don't try to manage individual file updates
-# system2("rm", args = c("-r", params$output_folder))
-# system2("cp", args = c("-R", paste(params$archive_folder), paste(params$output_folder)))
-
-
+system2("rm", args = c("-r", params$output_folder))
+system2("cp", args = c("-R", paste(params$archive_folder), paste(params$output_folder)))
 
 ```
 
