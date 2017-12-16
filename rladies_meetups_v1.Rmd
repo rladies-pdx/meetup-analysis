@@ -17,6 +17,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 library(dplyr)
 library(ggplot2)
+library(ggthemes)
 library(httr)
 library(jsonlite)
 library(lubridate)
@@ -515,6 +516,8 @@ Determine number of members over time based on when members joined the group.
 
 ```{r historical_membership}
 
+# TODO
+
 ```
 
 
@@ -652,6 +655,8 @@ What groups have yet to have a first meetup?
 
 ```{r}
 
+# TODO
+
 ```
 
 
@@ -756,6 +761,7 @@ ggplot(event_intervals_summary_top, aes(x=reorder(location, num_meetups), y=reor
 Related to intervals above. In a given time period, how many meetups does each group have?
 
 ```{r event_cadence}
+# TODO
 
 ```
 
@@ -829,7 +835,7 @@ past_rsvp_summary <- past_rsvps %>%
   summarise(yes_rsvp_sum_grp=sum(yes_rsvp_count), region=first(region))
 ```
 
-```{r past_rsvp_summary_plot}
+```{r past_rsvp_summary_plot, fig.width=10, fig.height=10}
 
 ggplot(past_rsvp_summary, aes(x=event_ym, y=yes_rsvp_sum_grp)) +
   geom_bar(stat="identity", aes(fill=region))+
@@ -858,7 +864,7 @@ past_rsvp_freq <- past_rsvps %>%
   mutate(location=reorder(location, -members))
 ```
 
-```{r past_rsvp_freq_plot}
+```{r past_rsvp_freq_plot, fig.width=10, fig.height=10}
 
 ggplot(past_rsvp_freq, aes(x=location, y=rsvps_pct_mode)) +
   geom_bar(stat="identity", aes(fill=region)) + 
@@ -870,7 +876,7 @@ ggplot(past_rsvp_freq, aes(x=location, y=rsvps_pct_mode)) +
 
 Overall RSVPS per Meetup per group (over time)
 
-```{r rsvps_per_meetup}
+```{r rsvps_per_meetup, fig.width=10, fig.height=10}
 
 past_rsvps_month_curr <- past_rsvps %>%
   filter(str_detect(local_date, "2017")) # TODO can we use lubridate here?
@@ -895,7 +901,7 @@ ggplot(past_rsvps_month_curr %>% filter(region=="America"), aes(x=event_month, y
 
 Percent RSVPs - depends on total membership which only reports an overall total, not the total at the time of the event.
 
-```{r rsvps_pct_per_meetup}
+```{r rsvps_pct_per_meetup, fig.width=10, fig.height=10}
 
 ggplot(past_rsvps_month_curr, aes(x=event_month, y=yes_rsvp_pct)) +
   geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location), show.legend = FALSE) +
@@ -916,19 +922,15 @@ ggplot(past_rsvps_month_curr %>% filter(region=="America"), aes(x=event_month, y
 ```
 
 
-## RSVP Density
+## RSVP Density and Proportion
 
-Member RSVP Density per group (how often to members repeatedly RSVP)
+How many events do members RSVP to? How many members RSVP to more than half of the events?
 
-## RSVP Proportion
+We should also adjust this for event cadence. For example how many events does the meetup have per month and how many members RSVP to at least one meetup per month.
 
-% of events RSVP'ed per member -> rounded and summed - 1/1 = 1, 3/6 = .5, 4/4 = 1
+What proportion of events has each member RSVP'ed to? How many members RSVP to more than half of the events?
 
-^^ filter low # meetups
-
-## Member RSVP Proportions
-
-What proportion of events has each member RSVP'ed to? What are the general trends in each group?
+We should also adjust this for event cadence. For example how many events does the meetup have per month and how many members RSVP to at least one meetup per month.
 
 ```{r rsvp_proportion, message=FALSE, warning=FALSE}
 
@@ -941,12 +943,13 @@ meetup_events_past_merge <- meetup_events_past_merge %>%
   
 member_rsvps <- member_rsvps %>%
   mutate(
+    chapter = ifelse(str_detect(group.name, "Warsaw"), "Warsaw",
+                     str_replace(group.name, "R[ -]?[Ll]adies( )?(- )?", "")),
     created=as.POSIXct(created/1000, tz="UTC", origin="1970-01-01"),
     updated=as.POSIXct(updated/1000, tz="UTC", origin="1970-01-01"),
-    rsvp_guests=event.yes_rsvp_count-member_rsvps, # current theory to explain discrepancy
-    group.name=ifelse(str_detect(group.name, "Warsaw"), "R-Ladies Warsaw/RUG", as.character(group.name))
+    rsvp_guests=event.yes_rsvp_count-member_rsvps # current theory to explain discrepancy
     ) %>%
-  group_by(group.name) %>%
+  group_by(chapter) %>%
   mutate(
     num_events = n_distinct(event.id),
     rsvps_unique = n_distinct(member.id),
@@ -964,7 +967,7 @@ num_events_check
 
 # proportion of events rsvp'ed to by members in list
 member_rsvps_pct <- member_rsvps %>%
-  group_by(group.name, member.id) %>%
+  group_by(chapter, member.id) %>%
   summarise(
     num_rsvps=n(),
     num_events=first(num_events),
@@ -974,49 +977,150 @@ member_rsvps_pct <- member_rsvps %>%
   )
 
 member_rsvps_pct_summary <- member_rsvps_pct %>%
-  group_by(group.name, num_rsvps) %>%
+  group_by(chapter, num_rsvps) %>%
   summarise(
     num_members = n(),
     rsvps_events_pct = first(rsvps_events_pct),
     pct_rnd = round(rsvps_events_pct, 1),
     rsvps_all_pct = first(rsvps_all_pct),
     num_events = first(num_events),
+    num_events_log = round(log(num_events)),
     rsvps_unique = first(rsvps_unique),
     members_pct=round(num_members/rsvps_unique, 2)
   )
 ```
 
-```{r rsvp_proportion_plots}
 
-# members who have rsvp'ed to at least 50% of events (groups with <10 events)
+How many events do members RSVP to? Below we use proportion to make them comparable.
 
-ggplot(member_rsvps_pct_summary %>% filter(rsvps_events_pct > .5 & num_events > 2 & num_events < 10),
-       aes(x = reorder(group.name, members_pct), y = members_pct, fill = factor(pct_rnd))) +
-  geom_col(position="stack") +
+```{r member_rsvps_density_plot, fig.width=10, fig.height=10}
+
+ggplot(member_rsvps_pct %>% 
+         filter(num_events > 1) %>%
+         select(member.id, chapter, rsvps_events_pct), aes(x=rsvps_events_pct)) + 
+  geom_density() +
+  xlab("Member RSVP Events %") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  scale_x_continuous(breaks = c(0, .25, .50, .75, 1)) +
+  facet_wrap(~chapter, scales = "free")
+
+```
+
+When we think of members, we think of people who regularly attend R-Ladies events. One metric we could consider in addition to total members (people who have signed up) is "active members".
+
+The plot below uses the inverse log to determine a scaled proportion to check RSVP's against. A group with a smaller number of events should expect more active members to have attended a higher proportion of those events (log(2) = 1 -> 1/1 = 100%, log(42) = 4 -> 1/4 = 25%)). This method also filters out groups with only one event (log(1) = 0 -> 1/0 = Inf).
+
+```{r rsvps_by_member_plot, fig.width=10, fig.height=10}
+
+ggplot(member_rsvps_pct_summary %>%
+         filter(rsvps_events_pct >= 1/num_events_log), 
+       aes(x=reorder(chapter, num_events), y=num_members)) +
+  geom_bar(aes(fill=factor(round(rsvps_events_pct,1))), stat="identity", position="stack") +
+  theme_few() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(x="Chapter", y="# Members", fill="% Events", title="Most Active Members by RSVP") +
   coord_flip()
 
-ggplot(member_rsvps_pct_summary %>% filter(rsvps_events_pct > .5 & num_events > 2 & num_events < 10),
-       aes(x = reorder(group.name, num_members), y = num_members, fill = factor(pct_rnd))) +
-  geom_col(position="stack") +
+# TODO scales pretty percent
+```
+
+### RSVP Proportion
+
+To better understand the significance of of the "active" membership numbers computed above, we convert them into a proportion using the total number of members who have RSVPed.
+
+```{r rsvp_proportion_plots, fig.width=10, fig.height=10}
+
+ggplot(member_rsvps_pct_summary %>%
+         filter(rsvps_events_pct >= 1/num_events_log), 
+       aes(x=reorder(chapter, num_events), y=members_pct)) +
+  geom_bar(aes(fill=factor(round(rsvps_events_pct,1))), stat="identity", position="stack") +
+  theme_few() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(x="Chapter", y="% RSVPed Members", fill="% Events", title="% Most Active Members by RSVP") +
   coord_flip()
 
-# members who have rsvp'ed to at least 25% of events (groups with 10+ events)
+# TODO scales pretty percent
 
-ggplot(member_rsvps_pct_summary %>% filter(rsvps_events_pct > .25 & num_events >= 10),
-       aes(x = reorder(group.name, members_pct), y = members_pct, fill = factor(pct_rnd))) +
-  geom_col(position="stack") +
-  coord_flip()
-
-ggplot(member_rsvps_pct_summary %>% filter(rsvps_events_pct > .25 & num_events >= 10),
-       aes(x = reorder(group.name, num_members), y = num_members, fill = factor(pct_rnd))) +
-  geom_col(position="stack") +
-  coord_flip()
 ```
 
 
 ## Membership vs RSVPs
 
 How do # members compare to RSVP patterns?
+
+```{r members_vs_rsvps, message=FALSE}
+meetup_groups <- read_csv(paste(params$output_folder, "rladies_meetup_groups.csv", sep="/"))
+
+meetup_groups <- meetup_groups %>% 
+  mutate(
+    chapter = ifelse(str_detect(name, "Warsaw"), "Warsaw", 
+                     str_replace(name, "R[ -]?[Ll]adies( )?(- )?", ""))
+    )
+
+meetup_rsvp_group_merge <- member_rsvps_pct_summary %>%
+  group_by(chapter) %>%
+  summarize(
+    rsvp_members = first(rsvps_unique),
+    rsvps = sum(num_rsvps),
+    num_events = first(num_events),
+    num_events_log = first(num_events_log),
+    active_members = sum(num_members[rsvps_events_pct >= 1/num_events_log]),
+    active_rsvps = sum(num_rsvps[rsvps_events_pct >= 1/num_events_log]),
+    single_members = sum(num_members[num_rsvps == 1])
+  ) %>% 
+  left_join(meetup_groups %>% select(chapter, members))
+
+# percentage of members that RSVP'ed
+# percentage of single rsvp members
+# percentage of active members
+# percentage of members who have never rsvped
+
+meetup_rsvp_group_merge <- meetup_rsvp_group_merge %>%
+  mutate(
+    rsvp_members_pct = round(rsvp_members/members,2),
+    single_members_pct = round(single_members/members,2),
+    active_members_pct = round(active_members/members,2),
+    no_rsvp_members = members - rsvp_members,
+    no_rsvp_members_pct = round(no_rsvp_members/members,2),
+    rsvp_members_diff = no_rsvp_members - rsvp_members,
+    rsvp_members_diff_pct = round(rsvp_members_diff/members, 2)
+  )
+
+rsvps_vs_members <- meetup_rsvp_group_merge %>%
+  select(chapter, rsvp_members_pct, single_members_pct, active_members_pct, no_rsvp_members_pct) %>%
+  melt() %>%
+  inner_join(meetup_rsvp_group_merge %>% select(chapter, members)) 
+
+```
+
+```{r members_vs_rsvps_plot, fig.width=10, fig.height=10}
+
+ggplot(meetup_rsvp_group_merge, aes(x=reorder(chapter, members), y=rsvp_members_diff_pct)) +
+  geom_bar(aes(fill=chapter), stat="identity", position="dodge", show.legend = FALSE) +
+  theme_few() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(x="Chapter", y="No RSVP Members - RSVPed Members", title="Members w/o RSVP vs RSVP Members") +
+  coord_flip()
+
+ggplot(rsvps_vs_members %>% filter(variable %in% c("rsvp_members_pct", "no_rsvp_members_pct")), 
+       aes(x=reorder(chapter, members), y=value)) +
+  geom_bar(aes(fill=variable), stat="identity", position="dodge") +
+  theme_few() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(x="Chapter", y="% Members", fill="Member Type", title="% of Members") +
+  coord_flip()
+
+ggplot(rsvps_vs_members %>% filter(variable %in% c("active_members_pct", "single_members_pct")), 
+       aes(x=reorder(chapter, members), y=value)) +
+  geom_bar(aes(fill=variable), stat="identity", position="dodge") +
+  theme_few() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(x="Chapter", y="% Members", fill="Member Type", title="% of Members") +
+  coord_flip()
+
+```
+
+
 
 # Conclusions
 
