@@ -9,6 +9,7 @@ params:
   meetup_api_key: !r Sys.getenv("API_KEY_MEETUP_RLADIES")
   archive_folder: !r Sys.Date()
   output_folder: "latest"
+  rds_folder: "rds"
 ---
 
 ```{r setup, include=FALSE}
@@ -16,6 +17,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 library(dplyr)
 library(ggplot2)
+library(ggthemes)
 library(httr)
 library(jsonlite)
 library(lubridate)
@@ -41,8 +43,9 @@ https://github.com/rladies-pdx/meetup-analysis
 
 ## Meetup API Setup
 
-```{r globals}
+```{r globals, warning=FALSE}
 dir.create(file.path(params$output_folder))
+dir.create(file.path(params$rds_folder))
 
 get_meetups <- function (url, query) {
   req <- GET(url, query=query)
@@ -507,6 +510,17 @@ meetups_missing_topic %>% filter(str_detect(name, "[Rr]([ -]?)[Ll]adies")) %>%
 
 Membership numbers only show the current totals. To track membership over time we need to see when members joined the group. Additionally, we are interested in discovering repeat RSVPs as well as common group membership.
 
+## Historical Membership
+
+Determine number of members over time based on when members joined the group.
+
+```{r historical_membership}
+
+# TODO
+
+```
+
+
 # Meetup Activity
 
 Identifying which groups are regularly scheduling Meetups will help us to see who is the most active. Groups with gaps in Meetup activity or with no events should be highlighted so we can reach out to their organizers. 
@@ -514,6 +528,7 @@ Identifying which groups are regularly scheduling Meetups will help us to see wh
 ## Past Events
 
 ```{r read_past_events, message=FALSE}
+
 meetup_events_past <- read_csv(paste(params$output_folder,"rladies_meetup_events_past.csv", sep="/"))
 
 meetup_groups <- read_csv(paste(params$output_folder, "rladies_meetup_groups.csv", sep="/"))
@@ -528,6 +543,8 @@ meetup_events_past_merge <- meetup_events_past_merge %>%
   mutate(
     group.created=as.POSIXct(group.created/1000, tz="UTC", origin="1970-01-01"),
     created=as.POSIXct(created/1000, tz="UTC", origin="1970-01-01"))
+
+saveRDS(meetup_events_past_merge, paste(params$rds_folder, "meetup_events_past_merge.Rds", sep="/"))
 ```
 
 ## Event Frequency
@@ -632,9 +649,20 @@ ggplot(created_vs_first_melt, aes(x=location, y=value)) +
   coord_flip()
 ```
 
+## No First Meetup
+
+What groups have yet to have a first meetup?
+
+```{r}
+
+# TODO
+
+```
+
+
 ## Event Interval
 
-How much time passes between the Meetup events? Are some groups regularly meeting every month? What is the typical time interval between Meetup groups?
+How much time passes between the Meetup events? Are some groups regularly meeting every month? What is the typical time between Meetup groups?
 
 ```{r event_interval}
 
@@ -728,6 +756,14 @@ ggplot(event_intervals_summary_top, aes(x=reorder(location, num_meetups), y=reor
 
 ```
 
+# Event Cadence
+
+Related to intervals above. In a given time period, how many meetups does each group have?
+
+```{r event_cadence}
+# TODO
+
+```
 
 
 # Upcoming Meetups
@@ -797,7 +833,7 @@ past_rsvp_summary <- past_rsvps %>%
   summarise(yes_rsvp_sum_grp=sum(yes_rsvp_count), region=first(region))
 ```
 
-```{r past_rsvp_summary_plot}
+```{r past_rsvp_summary_plot, fig.width=10, fig.height=10}
 
 ggplot(past_rsvp_summary, aes(x=event_ym, y=yes_rsvp_sum_grp)) +
   geom_bar(stat="identity", aes(fill=region))+
@@ -826,7 +862,7 @@ past_rsvp_freq <- past_rsvps %>%
   mutate(location=reorder(location, -members))
 ```
 
-```{r past_rsvp_freq_plot}
+```{r past_rsvp_freq_plot, fig.width=10, fig.height=10}
 
 ggplot(past_rsvp_freq, aes(x=location, y=rsvps_pct_mode)) +
   geom_bar(stat="identity", aes(fill=region)) + 
@@ -838,7 +874,7 @@ ggplot(past_rsvp_freq, aes(x=location, y=rsvps_pct_mode)) +
 
 Overall RSVPS per Meetup per group (over time)
 
-```{r rsvps_per_meetup}
+```{r rsvps_per_meetup, fig.width=10, fig.height=10}
 
 past_rsvps_month_curr <- past_rsvps %>%
   filter(str_detect(local_date, "2017")) # TODO can we use lubridate here?
@@ -863,7 +899,7 @@ ggplot(past_rsvps_month_curr %>% filter(region=="America"), aes(x=event_month, y
 
 Percent RSVPs - depends on total membership which only reports an overall total, not the total at the time of the event.
 
-```{r rsvps_pct_per_meetup}
+```{r rsvps_pct_per_meetup, fig.width=10, fig.height=10}
 
 ggplot(past_rsvps_month_curr, aes(x=event_month, y=yes_rsvp_pct)) +
   geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location), show.legend = FALSE) +
@@ -884,19 +920,248 @@ ggplot(past_rsvps_month_curr %>% filter(region=="America"), aes(x=event_month, y
 ```
 
 
-## RSVP Density
+## RSVP Density and Proportion
 
-Member RSVP Density per group (how often to members repeatedly RSVP)
+How many events do members RSVP to? How many members RSVP to more than half of the events?
 
-## RSVP Proportion
+We should also adjust this for event cadence. For example how many events does the meetup have per month and how many members RSVP to at least one meetup per month.
 
-% of events RSVP'ed per member -> rounded and summed - 1/1 = 1, 3/6 = .5, 4/4 = 1
+What proportion of events has each member RSVP'ed to? How many members RSVP to more than half of the events?
 
-^^ filter low # meetups
+We should also adjust this for event cadence. For example how many events does the meetup have per month and how many members RSVP to at least one meetup per month.
+
+```{r rsvp_proportion, message=FALSE, warning=FALSE}
+
+meetup_events_past_merge <- readRDS(paste(params$rds_folder, "meetup_events_past_merge.Rds", sep="/"))
+member_rsvps <- read.csv(paste(params$output_folder,"rladies_member_rsvps.csv", sep="/"))
+
+meetup_events_past_merge <- meetup_events_past_merge %>%
+  group_by(group.name) %>%
+  mutate(num_events = n_distinct(id))
+  
+member_rsvps <- member_rsvps %>%
+  mutate(
+    chapter = ifelse(str_detect(group.name, "Warsaw"), "Warsaw",
+                     str_replace(group.name, "R[ -]?[Ll]adies( )?(- )?", "")),
+    created=as.POSIXct(created/1000, tz="UTC", origin="1970-01-01"),
+    updated=as.POSIXct(updated/1000, tz="UTC", origin="1970-01-01"),
+    rsvp_guests=event.yes_rsvp_count-member_rsvps # current theory to explain discrepancy
+    ) %>%
+  group_by(chapter) %>%
+  mutate(
+    num_events = n_distinct(event.id),
+    rsvps_unique = n_distinct(member.id),
+    total_rsvps = sum(member_rsvps)
+  )
+
+# check events totals
+# look for missing events from member_rsvps
+num_events_check <- meetup_events_past_merge %>% 
+  select(id, num_events, yes_rsvp_count) %>% 
+  anti_join(member_rsvps, by=c("id" = "event.id")) %>% 
+  filter(yes_rsvp_count > 0)
+
+num_events_check
+
+# proportion of events rsvp'ed to by members in list
+member_rsvps_pct <- member_rsvps %>%
+  group_by(chapter, member.id) %>%
+  summarise(
+    num_rsvps=n(),
+    num_events=first(num_events),
+    rsvps_unique=first(rsvps_unique),
+    rsvps_all_pct=round(num_rsvps/first(total_rsvps),4),
+    rsvps_events_pct=round(num_rsvps/num_events, 2)
+  )
+
+member_rsvps_pct_summary <- member_rsvps_pct %>%
+  group_by(chapter, num_rsvps) %>%
+  summarise(
+    num_members = n(),
+    rsvps_events_pct = first(rsvps_events_pct),
+    pct_rnd = round(rsvps_events_pct, 1),
+    rsvps_all_pct = first(rsvps_all_pct),
+    num_events = first(num_events),
+    num_events_log = round(log(num_events)),
+    rsvps_unique = first(rsvps_unique),
+    members_pct=round(num_members/rsvps_unique, 2)
+  )
+```
+
+
+How many events do members RSVP to? Below we use proportion to make them comparable.
+
+```{r member_rsvps_density_plot, fig.width=10, fig.height=10}
+
+ggplot(member_rsvps_pct %>% 
+         filter(num_events > 1) %>%
+         select(member.id, chapter, rsvps_events_pct), aes(x=rsvps_events_pct)) + 
+  geom_density() +
+  xlab("Member RSVP Events %") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  scale_x_continuous(breaks = c(0, .25, .50, .75, 1)) +
+  facet_wrap(~chapter, scales = "free")
+
+```
+
+When we think of members, we think of people who regularly attend R-Ladies events. One metric we could consider in addition to total members (people who have signed up) is "active members".
+
+The plot below uses the inverse log to determine a scaled proportion to check RSVP's against. A group with a smaller number of events should expect more active members to have attended a higher proportion of those events (log(2) = 1 -> 1/1 = 100%, log(42) = 4 -> 1/4 = 25%)). This method also filters out groups with only one event (log(1) = 0 -> 1/0 = Inf).
+
+```{r rsvps_by_member_plot, fig.width=10, fig.height=10}
+
+ggplot(member_rsvps_pct_summary %>%
+         filter(rsvps_events_pct >= 1/num_events_log), 
+       aes(x=reorder(chapter, num_events), y=num_members)) +
+  geom_bar(aes(fill=factor(round(rsvps_events_pct,1))), stat="identity", position="stack") +
+  theme_few() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(x="Chapter", y="# Members", fill="% Events", title="Most Active Members by RSVP") +
+  coord_flip()
+
+# TODO scales pretty percent
+```
+
+### RSVP Proportion
+
+To better understand the significance of of the "active" membership numbers computed above, we convert them into a proportion using the total number of members who have RSVPed.
+
+```{r rsvp_proportion_plots, fig.width=10, fig.height=10}
+
+ggplot(member_rsvps_pct_summary %>%
+         filter(rsvps_events_pct >= 1/num_events_log), 
+       aes(x=reorder(chapter, num_events), y=members_pct)) +
+  geom_bar(aes(fill=factor(round(rsvps_events_pct,1))), stat="identity", position="stack") +
+  theme_few() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(x="Chapter", y="% RSVPed Members", fill="% Events", title="% Most Active Members by RSVP") +
+  coord_flip()
+
+# TODO scales pretty percent
+
+```
+
 
 ## Membership vs RSVPs
 
-How do # members compare to RSVP patterns?
+How does the total number of members compare to RSVP patterns? The goal of this is to understand how total membership may not be respresentative of actual member engagement. RSVP's are also not necessarily indicative of who is actually showing up to the events but it's the best that Meetup has to offer that is a consistent measure across groups.
+
+```{r members_vs_rsvps, message=FALSE}
+meetup_groups <- read_csv(paste(params$output_folder, "rladies_meetup_groups.csv", sep="/"))
+
+meetup_groups <- meetup_groups %>% 
+  mutate(
+    chapter = ifelse(str_detect(name, "Warsaw"), "Warsaw", 
+                     str_replace(name, "R[ -]?[Ll]adies( )?(- )?", ""))
+    )
+
+meetup_rsvp_group_merge <- member_rsvps_pct_summary %>%
+  group_by(chapter) %>%
+  summarize(
+    rsvp_members = first(rsvps_unique),
+    rsvps = sum(num_rsvps),
+    num_events = first(num_events),
+    num_events_log = first(num_events_log),
+    active_members = sum(num_members[rsvps_events_pct >= 1/num_events_log]),
+    active_rsvps = sum(num_rsvps[rsvps_events_pct >= 1/num_events_log]),
+    single_members = sum(num_members[num_rsvps == 1])
+  ) %>% 
+  left_join(meetup_groups %>% select(chapter, members))
+
+# percentage of members that RSVP'ed
+# percentage of single rsvp members
+# percentage of active members
+# percentage of members who have never rsvped
+
+meetup_rsvp_group_merge <- meetup_rsvp_group_merge %>%
+  mutate(
+    rsvp_members_pct = round(rsvp_members/members,2),
+    single_members_pct = round(single_members/members,2),
+    active_members_pct = round(active_members/members,2),
+    no_rsvp_members = members - rsvp_members,
+    no_rsvp_members_pct = round(no_rsvp_members/members,2),
+    rsvp_members_diff = no_rsvp_members - rsvp_members,
+    rsvp_members_diff_pct = round(rsvp_members_diff/members, 2),
+  )
+
+rsvps_vs_members <- meetup_rsvp_group_merge %>%
+  select(chapter, rsvp_members_pct, single_members_pct, active_members_pct, no_rsvp_members_pct) %>%
+  melt() %>%
+  inner_join(meetup_rsvp_group_merge %>% select(chapter, members)) 
+
+```
+
+Do more members RSVP or not? 
+
+The plot below offers a side-by-side comparison of members who have rsvp'ed and members who have not, scaled in proportion to total membership.
+
+```{r members_vs_rsvps_plot_2, fig.width=10, fig.height=10}
+
+ggplot(rsvps_vs_members %>% filter(variable %in% c("rsvp_members_pct", "no_rsvp_members_pct")), 
+       aes(x=reorder(chapter, members), y=value)) +
+  geom_bar(aes(fill=variable), stat="identity", position="dodge") +
+  theme_few() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(x="Chapter", y="% Members", fill="Member Type", title="% Members RSVP vs No RSVPs, side by side") +
+  coord_flip()
+
+```
+
+This plot creates a single value for comparison by taking the difference between the number of members who have never RSVP'ed for a Meetup event and those who have RSVP'ed to at least one. A huge positive difference indicates the majority of members have not RSVP'ed to any of the events which indicates a high membership number may not be reflective of actual Meetup participation. A negative difference indicates the majority of members have RSVP'ed and indicates a high level of engagement; the reported membership number should be a good indicator of Meetup participation. Percentage of total members has been used to scale for comparison across Meetup groups with highly variable members. 
+
+```{r members_vs_rsvps_plot_1, fig.width=10, fig.height=10}
+
+ggplot(meetup_rsvp_group_merge, aes(x=reorder(chapter, members), y=rsvp_members_diff_pct)) +
+  geom_bar(aes(fill=chapter), stat="identity", position="dodge", show.legend = FALSE) +
+  theme_few() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(x="Chapter", y="No RSVP Members - RSVPed Members (Scaled)", 
+       title="Members w/o RSVP vs RSVP Members - Ordered by # Members") +
+  coord_flip()
+
+ggplot(meetup_rsvp_group_merge, aes(x=round(rsvp_members_diff_pct, 1))) +
+  geom_histogram(bins=12) +
+  theme_few() +
+  labs(x="No RSVP Members - RSVPed Members", title="Members w/o RSVP vs RSVP Members")
+```
+
+Because the majority of groups had around 40% or less difference between RSVPs and total membership, groups that went over that threshold are called out. If stratifying the groups based on this difference is useful, a threshhold weighted by total membership should probably be considered.
+
+```{r members_vs_rsvps_plot_1a, fig.width=10, fig.height=10}
+
+ggplot(meetup_rsvp_group_merge %>% filter(rsvp_members_diff_pct >= .4), 
+       aes(x=reorder(chapter, rsvp_members_diff_pct), y=rsvp_members_diff_pct)) +
+  geom_bar(aes(fill=chapter), stat="identity", position="dodge", show.legend = FALSE) +
+  theme_few() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(x="Chapter", y="No RSVP Members - RSVPed Members (Scaled)", title="RSVP vs No RSVP - Groups w/ Big Diffs") +
+  coord_flip()
+
+# should we adjust to an acceptable threshhold based on total members?
+ggplot(meetup_rsvp_group_merge %>% filter(rsvp_members_diff_pct >= .4), 
+       aes(x=reorder(chapter, rsvp_members_diff_pct), y=rsvp_members_diff)) +
+  geom_bar(aes(fill=chapter), stat="identity", position="dodge", show.legend = FALSE) +
+  theme_few() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(x="Chapter", y="No RSVP Members - RSVPed Members (Actual)", title="RSVP vs No RSVP - Groups w/ Big Diffs") +
+  coord_flip()
+```
+
+The following plot compares members who have only RSVP'ed to a single event and those who have RSVP'ed to a significant number (determined above using total number of events the group has had). This comparison is probably more significant for groups that have had a large number of events. It could potentially be a Meetup health measure. If a significant number of members only RSVP once and then don't RSVP again, it could be worth reaching out to the Meetup group to see if they need support.
+
+```{r members_vs_rsvps_plot_3, fig.width=10, fig.height=10}
+
+ggplot(rsvps_vs_members %>% filter(variable %in% c("active_members_pct", "single_members_pct")), 
+       aes(x=reorder(chapter, members), y=value)) +
+  geom_bar(aes(fill=variable), stat="identity", position="dodge") +
+  theme_few() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(x="Chapter", y="% Members", fill="Member Type", title="High RSVP Members vs Single Event RSVP Members") +
+  coord_flip()
+```
+
+
+
 
 # Conclusions
 
