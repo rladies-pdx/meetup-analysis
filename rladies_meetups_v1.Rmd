@@ -766,8 +766,6 @@ Related to intervals above. In a given time period, how many meetups does each g
 ```
 
 
-
-
 # Upcoming Meetups
 
 ### Upcoming Events Endpoint vs Fetch per Group
@@ -1046,7 +1044,7 @@ ggplot(member_rsvps_pct_summary %>%
 
 ## Membership vs RSVPs
 
-How do # members compare to RSVP patterns?
+How does the total number of members compare to RSVP patterns? The goal of this is to understand how total membership may not be respresentative of actual member engagement. RSVP's are also not necessarily indicative of who is actually showing up to the events but it's the best that Meetup has to offer that is a consistent measure across groups.
 
 ```{r members_vs_rsvps, message=FALSE}
 meetup_groups <- read_csv(paste(params$output_folder, "rladies_meetup_groups.csv", sep="/"))
@@ -1083,7 +1081,7 @@ meetup_rsvp_group_merge <- meetup_rsvp_group_merge %>%
     no_rsvp_members = members - rsvp_members,
     no_rsvp_members_pct = round(no_rsvp_members/members,2),
     rsvp_members_diff = no_rsvp_members - rsvp_members,
-    rsvp_members_diff_pct = round(rsvp_members_diff/members, 2)
+    rsvp_members_diff_pct = round(rsvp_members_diff/members, 2),
   )
 
 rsvps_vs_members <- meetup_rsvp_group_merge %>%
@@ -1093,32 +1091,75 @@ rsvps_vs_members <- meetup_rsvp_group_merge %>%
 
 ```
 
-```{r members_vs_rsvps_plot, fig.width=10, fig.height=10}
+Do more members RSVP or not? 
 
-ggplot(meetup_rsvp_group_merge, aes(x=reorder(chapter, members), y=rsvp_members_diff_pct)) +
-  geom_bar(aes(fill=chapter), stat="identity", position="dodge", show.legend = FALSE) +
-  theme_few() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
-  labs(x="Chapter", y="No RSVP Members - RSVPed Members", title="Members w/o RSVP vs RSVP Members") +
-  coord_flip()
+The plot below offers a side-by-side comparison of members who have rsvp'ed and members who have not, scaled in proportion to total membership.
+
+```{r members_vs_rsvps_plot_2, fig.width=10, fig.height=10}
 
 ggplot(rsvps_vs_members %>% filter(variable %in% c("rsvp_members_pct", "no_rsvp_members_pct")), 
        aes(x=reorder(chapter, members), y=value)) +
   geom_bar(aes(fill=variable), stat="identity", position="dodge") +
   theme_few() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
-  labs(x="Chapter", y="% Members", fill="Member Type", title="% of Members") +
+  labs(x="Chapter", y="% Members", fill="Member Type", title="% Members RSVP vs No RSVPs, side by side") +
   coord_flip()
+
+```
+
+This plot creates a single value for comparison by taking the difference between the number of members who have never RSVP'ed for a Meetup event and those who have RSVP'ed to at least one. A huge positive difference indicates the majority of members have not RSVP'ed to any of the events which indicates a high membership number may not be reflective of actual Meetup participation. A negative difference indicates the majority of members have RSVP'ed and indicates a high level of engagement; the reported membership number should be a good indicator of Meetup participation. Percentage of total members has been used to scale for comparison across Meetup groups with highly variable members. 
+
+```{r members_vs_rsvps_plot_1, fig.width=10, fig.height=10}
+
+ggplot(meetup_rsvp_group_merge, aes(x=reorder(chapter, members), y=rsvp_members_diff_pct)) +
+  geom_bar(aes(fill=chapter), stat="identity", position="dodge", show.legend = FALSE) +
+  theme_few() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(x="Chapter", y="No RSVP Members - RSVPed Members (Scaled)", 
+       title="Members w/o RSVP vs RSVP Members - Ordered by # Members") +
+  coord_flip()
+
+ggplot(meetup_rsvp_group_merge, aes(x=round(rsvp_members_diff_pct, 1))) +
+  geom_histogram(bins=12) +
+  theme_few() +
+  labs(x="No RSVP Members - RSVPed Members", title="Members w/o RSVP vs RSVP Members")
+```
+
+Because the majority of groups had around 40% or less difference between RSVPs and total membership, groups that went over that threshold are called out. If stratifying the groups based on this difference is useful, a threshhold weighted by total membership should probably be considered.
+
+```{r members_vs_rsvps_plot_1a, fig.width=10, fig.height=10}
+
+ggplot(meetup_rsvp_group_merge %>% filter(rsvp_members_diff_pct >= .4), 
+       aes(x=reorder(chapter, rsvp_members_diff_pct), y=rsvp_members_diff_pct)) +
+  geom_bar(aes(fill=chapter), stat="identity", position="dodge", show.legend = FALSE) +
+  theme_few() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(x="Chapter", y="No RSVP Members - RSVPed Members (Scaled)", title="RSVP vs No RSVP - Groups w/ Big Diffs") +
+  coord_flip()
+
+# should we adjust to an acceptable threshhold based on total members?
+ggplot(meetup_rsvp_group_merge %>% filter(rsvp_members_diff_pct >= .4), 
+       aes(x=reorder(chapter, rsvp_members_diff_pct), y=rsvp_members_diff)) +
+  geom_bar(aes(fill=chapter), stat="identity", position="dodge", show.legend = FALSE) +
+  theme_few() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(x="Chapter", y="No RSVP Members - RSVPed Members (Actual)", title="RSVP vs No RSVP - Groups w/ Big Diffs") +
+  coord_flip()
+```
+
+The following plot compares members who have only RSVP'ed to a single event and those who have RSVP'ed to a significant number (determined above using total number of events the group has had). This comparison is probably more significant for groups that have had a large number of events. It could potentially be a Meetup health measure. If a significant number of members only RSVP once and then don't RSVP again, it could be worth reaching out to the Meetup group to see if they need support.
+
+```{r members_vs_rsvps_plot_3, fig.width=10, fig.height=10}
 
 ggplot(rsvps_vs_members %>% filter(variable %in% c("active_members_pct", "single_members_pct")), 
        aes(x=reorder(chapter, members), y=value)) +
   geom_bar(aes(fill=variable), stat="identity", position="dodge") +
   theme_few() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
-  labs(x="Chapter", y="% Members", fill="Member Type", title="% of Members") +
+  labs(x="Chapter", y="% Members", fill="Member Type", title="High RSVP Members vs Single Event RSVP Members") +
   coord_flip()
-
 ```
+
 
 
 
