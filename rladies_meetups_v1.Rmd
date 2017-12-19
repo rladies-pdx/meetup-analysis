@@ -512,14 +512,7 @@ Membership numbers only show the current totals. To track membership over time w
 
 ## Historical Membership
 
-Determine number of members over time based on when members joined the group.
-
-```{r historical_membership}
-
-# TODO
-
-```
-
+Proposed Improvement: Determine number of members over time based on when members joined the group. This will be done in a Membership focused version of this analysis.
 
 # Meetup Activity
 
@@ -575,13 +568,6 @@ past_events_freq <- meetup_events_past_merge %>%
 ggplot(past_events_freq, aes(x=reorder(location, num_events), y=num_events)) +
   geom_bar(stat="identity", aes(fill=region)) +
   coord_flip()
-
-```
-
-
-```{r past_events_freq_map, eval=FALSE}
-
-# TODO: error when using maps - Error: ggplot2 doesn't know how to deal with data of class list
 
 ```
 
@@ -651,13 +637,7 @@ ggplot(created_vs_first_melt, aes(x=location, y=value)) +
 
 ## No First Meetup
 
-What groups have yet to have a first meetup?
-
-```{r}
-
-# TODO
-
-```
+A proposed metric would be to identify what groups have yet to have a first meetup. This could be an anti-join between the group list and the event summary.
 
 
 ## Event Interval
@@ -758,13 +738,7 @@ ggplot(event_intervals_summary_top, aes(x=reorder(location, num_meetups), y=reor
 
 # Event Cadence
 
-Related to intervals above. In a given time period, how many meetups does each group have?
-
-```{r event_cadence}
-# TODO
-
-```
-
+Related to intervals above. In a given time period, how many meetups does each group have? This is mentioned as a proposed metric below and will be part of a future version of this analysis focused on Events.
 
 # Upcoming Meetups
 
@@ -1170,6 +1144,10 @@ ggplot(rsvps_vs_members %>% filter(variable %in% c("active_members_pct", "single
 ### Needs Topic
 
 Identify R-Ladies Meetups that are not using the R-Ladies topics so we can ask them to add it to their Meetup.
+
+### No First Meetup
+
+R-Ladies Meetups that haven't had a first event yet ordered time since creation, from high to low. Groups at the top of the list should be reached out to to see if they need help. This could also be helpful for identifying possible abandoned meetups.
 
 ### Meetup Event Interval
 
