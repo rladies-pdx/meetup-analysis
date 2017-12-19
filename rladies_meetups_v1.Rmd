@@ -25,6 +25,7 @@ library(maps)
 library(purrr)
 library(readr)
 library(reshape2)
+library(scales)
 library(stringr)
 library(tidyr)
 ```
@@ -563,11 +564,13 @@ past_events_freq <- meetup_events_past_merge %>%
 
 ```
 
-```{r past_events_freq_hist}
+```{r past_events_freq_hist, fig.height=8, fig.width=10}
 
 ggplot(past_events_freq, aes(x=reorder(location, num_events), y=num_events)) +
   geom_bar(stat="identity", aes(fill=region)) +
-  coord_flip()
+  theme_few() +
+  coord_flip() +
+  labs(x="Chapter", y="Events", title="Number of Events")
 
 ```
 
@@ -576,6 +579,7 @@ ggplot(past_events_freq, aes(x=reorder(location, num_events), y=num_events)) +
 ```{r}
 ggplot(past_events_freq, aes(x=reorder(events_min_max, num_events_log))) + 
   geom_density() +
+  theme_few() +
   xlab("Events per Meetup (Log)")
 ```
 
@@ -595,22 +599,20 @@ past_event_age <- meetup_events_past_merge %>%
          location=reorder(location, first_meetup_age))
 ```
 
-```{r meetup_first_event_plot}
+```{r meetup_first_event_plot, fig.width=10, fig.height=8}
 
 ggplot(past_event_age, aes(x=location, y=first_meetup_age)) +
   geom_bar(stat="identity", aes(fill=region)) +
+  theme_few() +
   coord_flip() +
   scale_y_continuous(breaks = pretty(past_event_age$first_meetup_age, n = 10)) +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
-  xlab("R-Ladies City") +
-  ylab("Days Since First Meetup")
-
+  labs(x="Chapter", y="Days Since First Meetup", title="Meetup Age by First Event")
 
 ```
 
 ## First Meetup vs Created
 
-```{r first_meetup_vs_created, message=FALSE, warning=FALSE}
+```{r first_meetup_vs_created, message=FALSE, warning=FALSE, fig.width=10, fig.height=8}
 
 created_vs_first <- past_event_age %>%
   mutate(
@@ -620,19 +622,23 @@ created_vs_first <- past_event_age %>%
 
 ggplot(created_vs_first, aes(x=location, y=created_interval)) +
   geom_bar(stat="identity", aes(fill=region)) +
-  coord_flip()
+  theme_few() +
+  coord_flip() +
+  labs(x="Chapter", y="Days", title="Days Between Creation and First Event")
 
 ```
 
-```{r, message=FALSE, warning=FALSE}
+```{r, message=FALSE, warning=FALSE, fig.height=8, fig.width=10}
 created_vs_first_melt <- created_vs_first %>% 
   mutate(location=reorder(location,group_age)) %>%
   select(location, group_age, created_interval) %>% 
   melt()
 
 ggplot(created_vs_first_melt, aes(x=location, y=value)) +
-  geom_bar(stat="identity", aes(fill=variable)) +
-  coord_flip()
+  geom_bar(stat="identity", position="dodge", aes(fill=variable)) +
+  theme_few() +
+  coord_flip() +
+  labs(x="Chapter", y="Days", fill= "Days Type", title="Meetup Age vs Days Between Creation and First Meetup")
 ```
 
 ## No First Meetup
@@ -657,40 +663,55 @@ event_intervals <- meetup_events_past_merge %>%
 
 ```
 
-```{r event_interval_plot}
+```{r event_interval_plot, message=FALSE, warning=FALSE, fig.width=10, fig.height=10}
 
 event_intervals_curr <- event_intervals %>% filter(local_date > as_datetime("2016-01-01"))
 
 ggplot(event_intervals_curr, aes(x=local_date, y=days_between)) +
   geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location), show.legend = FALSE)+
+  theme_few() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
   scale_y_continuous() +
   scale_x_date(date_breaks = "1 month") +
-  facet_wrap(~ region, scales="free")
+  facet_wrap(~ region, scales="free") +
+  labs(x="Event Month", y="Days Since Last Meetup", fill= "Region", title="Days Between Meetups")
+```
+
+```{r event_interval_plot_by_region, message=FALSE, warning=FALSE, fig.width=10, fig.height=8}
 
 ggplot(event_intervals_curr %>% filter(region %in% c("US", "Canada")), aes(x=local_date, y=days_between)) +
   geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location)) +
+  theme_few() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  guides(fill=guide_legend(ncol = 1)) +
   scale_y_continuous() +
-  scale_x_date(date_breaks = "1 month")
+  scale_x_date(date_breaks = "1 month") +
+  labs(x="Month", y="Days Since Last Meetup", fill= "Region", title="Days Between Meetups (North America)")
 
 ggplot(event_intervals_curr %>% filter(region=="Europe"), aes(x=local_date, y=days_between)) +
   geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location)) +
+  theme_few() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  guides(fill=guide_legend(ncol = 1)) +
   scale_y_continuous() +
-  scale_x_date(date_breaks = "1 month")
+  scale_x_date(date_breaks = "1 month") +
+  labs(x="Month", y="Days Since Last Meetup", fill= "Region", title="Days Between Meetups (Europe)")
 
 ggplot(event_intervals_curr %>% filter(region %in% c("Australia", "Asia", "Africa")), aes(x=local_date, y=days_between)) +
   geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location)) +
+  theme_few() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
   scale_y_continuous() +
-  scale_x_date(date_breaks = "1 month")
+  scale_x_date(date_breaks = "1 month") +
+  labs(x="Month", y="Days Since Last Meetup", fill= "Region", title="Days Between Meetups (APAC)")
 
 ggplot(event_intervals_curr %>% filter(region=="America"), aes(x=local_date, y=days_between)) +
   geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location)) +
+  theme_few() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
   scale_y_continuous() +
-  scale_x_date(date_breaks = "1 month")
+  scale_x_date(date_breaks = "1 month") +
+  labs(x="Month", y="Days Since Last Meetup", fill= "Region", title="Days Between Meetups (Latin America)")
 
 ```
 
@@ -724,14 +745,16 @@ event_intervals_summary_top <- event_intervals_summary %>%
   slice(which(days_between_freq == max(days_between_freq)))
 ```
 
-```{r event_interval_summary_plot}
+```{r event_interval_summary_plot, fig.height=8, fig.width=10}
 
 event_intervals_summary_top <- event_intervals_summary_top %>%
   mutate(days_between_min_max=)
 
 ggplot(event_intervals_summary_top, aes(x=reorder(location, num_meetups), y=reorder(days_between_min_max, days_between_log))) +
   geom_bar(stat="identity", position="dodge", aes(fill=region)) +
-  coord_flip()
+  theme_few() +
+  coord_flip() +
+  labs(x="Chapter", y="Days", fill= "Region", title="Days Between Meetups - Most Frequent")
   
 
 ```
@@ -807,11 +830,13 @@ past_rsvp_summary <- past_rsvps %>%
   summarise(yes_rsvp_sum_grp=sum(yes_rsvp_count), region=first(region))
 ```
 
-```{r past_rsvp_summary_plot, fig.width=10, fig.height=10}
+```{r past_rsvp_summary_plot, fig.width=10, fig.height=8}
 
 ggplot(past_rsvp_summary, aes(x=event_ym, y=yes_rsvp_sum_grp)) +
-  geom_bar(stat="identity", aes(fill=region))+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+  geom_bar(stat="identity", aes(fill=region)) +
+  theme_few() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(x="Event Month", y="Yes RSVPs", fill="Region", title="Past Yes RSVPs by Region")
 ```
 
 
@@ -836,11 +861,15 @@ past_rsvp_freq <- past_rsvps %>%
   mutate(location=reorder(location, -members))
 ```
 
-```{r past_rsvp_freq_plot, fig.width=10, fig.height=10}
+```{r past_rsvp_freq_plot, fig.width=10, fig.height=8}
 
 ggplot(past_rsvp_freq, aes(x=location, y=rsvps_pct_mode)) +
   geom_bar(stat="identity", aes(fill=region)) + 
-  coord_flip()
+  theme_few() +
+  scale_y_continuous(labels=percent) +
+  coord_flip() +
+  labs(x="Event Month", y="% of Unique Members who RSVPed at least once", fill="Region", 
+       title="Yes RSVPs - Most Frequent")
 
 ```
 
@@ -855,21 +884,36 @@ past_rsvps_month_curr <- past_rsvps %>%
 
 ggplot(past_rsvps_month_curr, aes(x=event_month, y=yes_rsvp_count)) +
   geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location), show.legend = FALSE) +
-  facet_wrap(~ region, scales="free")
-
-ggplot(past_rsvps_month_curr %>% filter(region %in% c("US", "Canada")), aes(x=event_month, y=yes_rsvp_count)) +
-  geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location))
-
-ggplot(past_rsvps_month_curr %>% filter(region=="Europe"), aes(x=event_month, y=yes_rsvp_count)) +
-  geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location))
-
-ggplot(past_rsvps_month_curr %>% filter(region %in% c("Australia", "Asia", "Africa")), aes(x=event_month, y=yes_rsvp_count)) +
-  geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location))
-
-ggplot(past_rsvps_month_curr %>% filter(region=="America"), aes(x=event_month, y=yes_rsvp_count)) +
-  geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location))
+  theme_few() +
+  facet_wrap(~ region, scales="free") +
+  labs(x="Event Month", y="# Yes RSVPs", fill="Region", title="Yes RSVPs by Chapter")
 
 ```
+
+```{r rsvps_per_meetup_by_region, fig.width=10, fig.height=8}
+
+ggplot(past_rsvps_month_curr %>% filter(region %in% c("US", "Canada")), aes(x=event_month, y=yes_rsvp_count)) +
+  geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location)) +
+  theme_few() +
+  labs(x="Event Month", y="# Yes RSVPs", fill="Region", title="Yes RSVPs by Chapter (North America)") +
+  guides(fill=guide_legend(ncol = 1))
+
+ggplot(past_rsvps_month_curr %>% filter(region=="Europe"), aes(x=event_month, y=yes_rsvp_count)) +
+  geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location)) +
+  theme_few() +
+  labs(x="Event Month", y="# Yes RSVPs", fill="Region", title="Yes RSVPs by Chapter (Europe)")
+
+ggplot(past_rsvps_month_curr %>% filter(region %in% c("Australia", "Asia", "Africa")), aes(x=event_month, y=yes_rsvp_count)) +
+  geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location)) +
+  theme_few() +
+  labs(x="Event Month", y="# Yes RSVPs", fill="Region", title="Yes RSVPs by Chapter (APAC)")
+
+ggplot(past_rsvps_month_curr %>% filter(region=="America"), aes(x=event_month, y=yes_rsvp_count)) +
+  geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location)) +
+  theme_few() +
+  labs(x="Event Month", y="# Yes RSVPs", fill="Region", title="Yes RSVPs by Chapter (Latin America)")
+```
+
 
 Percent RSVPs - depends on total membership which only reports an overall total, not the total at the time of the event.
 
@@ -878,18 +922,34 @@ Percent RSVPs - depends on total membership which only reports an overall total,
 ggplot(past_rsvps_month_curr, aes(x=event_month, y=yes_rsvp_pct)) +
   geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location), show.legend = FALSE) +
   facet_wrap(~ region, scales="free")
+```
+
+```{r rsvps_pct_per_meetup_by_region, fig.width=10, fig.height=8}
 
 ggplot(past_rsvps_month_curr %>% filter(region %in% c("US", "Canada")), aes(x=event_month, y=yes_rsvp_pct)) +
-  geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location))
+  geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location)) +
+  scale_y_continuous(labels=percent) +
+  theme_few() +
+  guides(fill=guide_legend(ncol=1)) +
+  labs(x="Event Month", y="% of Current Members RSVPed Yes", fill="Region", title="Yes RSVPs by Chapter (North America)")
 
 ggplot(past_rsvps_month_curr %>% filter(region=="Europe"), aes(x=event_month, y=yes_rsvp_pct)) +
-  geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location))
+  geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location)) +
+  scale_y_continuous(labels=percent) +
+  theme_few() +
+  labs(x="Event Month", y="% of Current Members RSVPed Yes", fill="Region", title="Yes RSVPs by Chapter (Europe)")
 
 ggplot(past_rsvps_month_curr %>% filter(region %in% c("Australia", "Asia", "Africa")), aes(x=event_month, y=yes_rsvp_pct)) +
-  geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location))
+  geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location)) +
+  scale_y_continuous(labels=percent) +
+  theme_few() +
+  labs(x="Event Month", y="% of Current Members RSVPed Yes", fill="Region", title="Yes RSVPs by Chapter (APAC)")
 
 ggplot(past_rsvps_month_curr %>% filter(region=="America"), aes(x=event_month, y=yes_rsvp_pct)) +
-  geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location))
+  geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location)) +
+  scale_y_continuous(labels=percent) +
+  theme_few() +
+  labs(x="Event Month", y="% of Current Members RSVPed Yes", fill="Region", title="Yes RSVPs by Chapter (Latin America)")
 
 ```
 
@@ -965,15 +1025,16 @@ member_rsvps_pct_summary <- member_rsvps_pct %>%
 
 How many events do members RSVP to? Below we use proportion to make them comparable.
 
-```{r member_rsvps_density_plot, fig.width=10, fig.height=10}
+```{r member_rsvps_density_plot, fig.width=10, fig.height=12}
 
 ggplot(member_rsvps_pct %>% 
          filter(num_events > 1) %>%
          select(member.id, chapter, rsvps_events_pct), aes(x=rsvps_events_pct)) + 
   geom_density() +
   xlab("Member RSVP Events %") +
+  theme_few() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
-  scale_x_continuous(breaks = c(0, .25, .50, .75, 1)) +
+  scale_x_continuous(breaks = c(0, .25, .50, .75, 1), labels=percent) +
   facet_wrap(~chapter, scales = "free")
 
 ```
@@ -987,13 +1048,12 @@ The plot below uses the inverse log to determine a scaled proportion to check RS
 ggplot(member_rsvps_pct_summary %>%
          filter(rsvps_events_pct >= 1/num_events_log), 
        aes(x=reorder(chapter, num_events), y=num_members)) +
-  geom_bar(aes(fill=factor(round(rsvps_events_pct,1))), stat="identity", position="stack") +
+  geom_bar(aes(fill=reorder(paste0(round(rsvps_events_pct,1)*100, "%"), -rsvps_events_pct)), 
+           stat="identity", position="stack") +
   theme_few() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
-  labs(x="Chapter", y="# Members", fill="% Events", title="Most Active Members by RSVP") +
+  labs(x="Chapter", y="# Members", fill="% Events", title="Most Active Members by % Events RSVPed To") +
   coord_flip()
 
-# TODO scales pretty percent
 ```
 
 ### RSVP Proportion
@@ -1005,13 +1065,12 @@ To better understand the significance of of the "active" membership numbers comp
 ggplot(member_rsvps_pct_summary %>%
          filter(rsvps_events_pct >= 1/num_events_log), 
        aes(x=reorder(chapter, num_events), y=members_pct)) +
-  geom_bar(aes(fill=factor(round(rsvps_events_pct,1))), stat="identity", position="stack") +
+  geom_bar(aes(fill=reorder(paste0(round(rsvps_events_pct,1)*100, "%"), -rsvps_events_pct)), 
+           stat="identity", position="stack") +
   theme_few() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
-  labs(x="Chapter", y="% RSVPed Members", fill="% Events", title="% Most Active Members by RSVP") +
+  scale_y_continuous(labels=percent) +
+  labs(x="Chapter", y="% RSVPed Members", fill="% Events", title="% Most Active Members by % Events RSVPed To") +
   coord_flip()
-
-# TODO scales pretty percent
 
 ```
 
@@ -1055,7 +1114,7 @@ meetup_rsvp_group_merge <- meetup_rsvp_group_merge %>%
     no_rsvp_members = members - rsvp_members,
     no_rsvp_members_pct = round(no_rsvp_members/members,2),
     rsvp_members_diff = no_rsvp_members - rsvp_members,
-    rsvp_members_diff_pct = round(rsvp_members_diff/members, 2),
+    rsvp_members_diff_pct = round(rsvp_members_diff/members, 2)
   )
 
 rsvps_vs_members <- meetup_rsvp_group_merge %>%
@@ -1075,7 +1134,7 @@ ggplot(rsvps_vs_members %>% filter(variable %in% c("rsvp_members_pct", "no_rsvp_
        aes(x=reorder(chapter, members), y=value)) +
   geom_bar(aes(fill=variable), stat="identity", position="dodge") +
   theme_few() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  scale_y_continuous(labels = percent) +
   labs(x="Chapter", y="% Members", fill="Member Type", title="% Members RSVP vs No RSVPs, side by side") +
   coord_flip()
 
@@ -1083,12 +1142,12 @@ ggplot(rsvps_vs_members %>% filter(variable %in% c("rsvp_members_pct", "no_rsvp_
 
 This plot creates a single value for comparison by taking the difference between the number of members who have never RSVP'ed for a Meetup event and those who have RSVP'ed to at least one. A huge positive difference indicates the majority of members have not RSVP'ed to any of the events which indicates a high membership number may not be reflective of actual Meetup participation. A negative difference indicates the majority of members have RSVP'ed and indicates a high level of engagement; the reported membership number should be a good indicator of Meetup participation. Percentage of total members has been used to scale for comparison across Meetup groups with highly variable members. 
 
-```{r members_vs_rsvps_plot_1, fig.width=10, fig.height=10}
+```{r members_vs_rsvps_plot_1, fig.width=10, fig.height=8}
 
 ggplot(meetup_rsvp_group_merge, aes(x=reorder(chapter, members), y=rsvp_members_diff_pct)) +
   geom_bar(aes(fill=chapter), stat="identity", position="dodge", show.legend = FALSE) +
   theme_few() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  scale_y_continuous(labels=percent) +
   labs(x="Chapter", y="No RSVP Members - RSVPed Members (Scaled)", 
        title="Members w/o RSVP vs RSVP Members - Ordered by # Members") +
   coord_flip()
@@ -1096,6 +1155,7 @@ ggplot(meetup_rsvp_group_merge, aes(x=reorder(chapter, members), y=rsvp_members_
 ggplot(meetup_rsvp_group_merge, aes(x=round(rsvp_members_diff_pct, 1))) +
   geom_histogram(bins=12) +
   theme_few() +
+  scale_y_continuous(labels = percent) +
   labs(x="No RSVP Members - RSVPed Members", title="Members w/o RSVP vs RSVP Members")
 ```
 
@@ -1107,7 +1167,7 @@ ggplot(meetup_rsvp_group_merge %>% filter(rsvp_members_diff_pct >= .4),
        aes(x=reorder(chapter, rsvp_members_diff_pct), y=rsvp_members_diff_pct)) +
   geom_bar(aes(fill=chapter), stat="identity", position="dodge", show.legend = FALSE) +
   theme_few() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  scale_y_continuous(labels = percent) +
   labs(x="Chapter", y="No RSVP Members - RSVPed Members (Scaled)", title="RSVP vs No RSVP - Groups w/ Big Diffs") +
   coord_flip()
 
@@ -1116,7 +1176,6 @@ ggplot(meetup_rsvp_group_merge %>% filter(rsvp_members_diff_pct >= .4),
        aes(x=reorder(chapter, rsvp_members_diff_pct), y=rsvp_members_diff)) +
   geom_bar(aes(fill=chapter), stat="identity", position="dodge", show.legend = FALSE) +
   theme_few() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
   labs(x="Chapter", y="No RSVP Members - RSVPed Members (Actual)", title="RSVP vs No RSVP - Groups w/ Big Diffs") +
   coord_flip()
 ```
@@ -1129,7 +1188,7 @@ ggplot(rsvps_vs_members %>% filter(variable %in% c("active_members_pct", "single
        aes(x=reorder(chapter, members), y=value)) +
   geom_bar(aes(fill=variable), stat="identity", position="dodge") +
   theme_few() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  scale_y_continuous(labels = percent) +
   labs(x="Chapter", y="% Members", fill="Member Type", title="High RSVP Members vs Single Event RSVP Members") +
   coord_flip()
 ```
