@@ -3,7 +3,7 @@
 
 All work is tracked using Milestones and Issues. Any issue that is unassigned is up for grabs.
 
-1. Claim an Issue.
+1. Claim an Issue (or file a new one).
 2. Fork the Repo.
 3. Make your changes and update your Fork.
 4. Create a Pull Request to submit your change for review.
@@ -18,7 +18,8 @@ All work is tracked using Milestones and Issues. Any issue that is unassigned is
 
 ### Commit Guidelines
 
-* Minimal commits per issue. If the issue requires more than one commit, make sure they are grouped appropriately. I recommend adding checkboxes to the issue for clarification. Please do not submit a change with a lot of one-off commits with vague messages.
+* Minimal commits per issue. If the issue requires more than one commit, make sure they are grouped appropriately. I recommend adding checkboxes to the issue for clarification. Please do not submit a change with a lot of one-off commits with vague messages. 
+  * If you need help with this, mention it in your PR and I can always rebase it down for you or pair with you to show you how.
 * Commit messages should mention the issue and indicate whether they resolve the issue or are related to it.
   * Closes: "Resolves Issue #1" (see Github closes syntax - https://help.github.com/articles/closing-issues-using-keywords/)
   * Part of multiple commits: "Part of Issue #1"
