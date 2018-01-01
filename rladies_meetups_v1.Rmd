@@ -47,6 +47,7 @@ https://github.com/rladies-pdx/meetup-analysis
 ```{r globals, warning=FALSE}
 dir.create(file.path(params$output_folder))
 dir.create(file.path(params$rds_folder))
+dir.create(file.path(params$archive_folder))
 
 get_meetups <- function (url, query) {
   req <- GET(url, query=query)
@@ -134,10 +135,8 @@ Names and other common identifying information about members has been removed. W
 
 ```{r group_members, eval=FALSE}
 
-# get_rladies_members <- function (meetup_groups, folder)
+get_rladies_members <- function (meetup_groups, folder) {
 
-folder <- params$archive_folder
-  
   members_query_params <- list(
     key=params$meetup_api_key, 
     sign=TRUE,
@@ -179,7 +178,7 @@ folder <- params$archive_folder
 
   write_csv(meetup_members, paste(folder, "rladies_meetup_members.csv", sep="/"), 
             na = "")
-
+}
 ```
 
 ## Upcoming Events
@@ -303,7 +302,9 @@ get_rladies_upcoming <- function (folder) {
 
 Get all past events for all groups. This call is expensive and gets throttled.
 
-```{r group_events_past, eval=FALSE}
+```{r group_events_past, eval=FALSE, message=FALSE, warning=FALSE}
+
+# Run this 2nd when updating archives
 
 # TODO this currently throttles out and has to be manipulated manually to run
 get_rladies_past_all <- function (folder) {}
@@ -362,7 +363,9 @@ get_rladies_past <- function() {
 
 Get a list of member id's that RSVP'ed to past meetups.
 
-```{r past_member_rsvps, eval=FALSE}
+```{r past_member_rsvps, eval=FALSE, message=FALSE, warning=FALSE}
+
+# Run this 3rd when updating archives
 
 base_url <- "https://api.meetup.com"
 
@@ -420,6 +423,8 @@ Create a new archive folder and get the latest data.
 
 ```{r get_latest_data, eval=FALSE}
 
+# Run this first when updating archives
+
 dir.create(file.path(params$archive_folder))
 
 # TODO add try/catch for throttling
@@ -468,17 +473,23 @@ self_groups <- read_csv(paste(params$output_folder, "rladies_self_groups.csv", s
 
 All Pending Groups:
 
+Groups the retrieval account does not belong to. Data from these groups will not be in this report. If this report has any groups listed here, have the retrieval account join them and then rerun the analysis above.
+
 ```{r pending_groups}
 pending_groups
 ```
 
 Pending Groups Not Requiring Approval:
 
+These are groups the retrieval account can join and have immediate access to. The ones requiring approval take longer because a person has to approve the membership.
+
 ```{r pending_groups_approval}
 pending_groups %>% filter(join_mode != "approval")
 ```
 
 ## Topic R-Ladies
+
+Groups that use the official "r-ladies" Meetup topic. These will show up on this page - [https://www.meetup.com/topics/r-ladies/]
 
 ```{r find_group_by_topic, message=FALSE}
 meetup_groups_topic <- read_csv(paste(params$output_folder, "rladies_meetup_groups_topic.csv", sep="/"))
@@ -494,7 +505,7 @@ meetup_groups_text <- read_csv(paste(params$output_folder, "rladies_meetup_group
 
 ## R-Ladies Missing Topic
 
-Naughty groups!
+Groups that matched a text search for R-Ladies but are not using the Meetup topic.
 
 ```{r groups_missing_topic}
 
@@ -576,6 +587,10 @@ ggplot(past_events_freq, aes(x=reorder(location, num_events), y=num_events)) +
 
 ## Event Frequency Density
 
+How many meetups are having how many events? What is the most common event frequency amongst Meetup groups? What's "normal"? This is only looking at number of events and does not consider other factors like Meetup age. The majority of groups have had between 1 and 4 events. 
+
+This uses a log of the total number of events to group into buckets, then the min/max of the values found in each bucket are reported on the X-axis. I'm sure there's a magical R function to do this instead of the way I'm doing it.
+
 ```{r}
 ggplot(past_events_freq, aes(x=reorder(events_min_max, num_events_log))) + 
   geom_density() +
@@ -585,7 +600,7 @@ ggplot(past_events_freq, aes(x=reorder(events_min_max, num_events_log))) +
 
 ## Meetup Age by First Event
 
-What is the "age" of meetups based on their first event?
+What is the "age" of meetups based on their first event? Rather than considering the date the Meetup was created, looking at when the first event happened may be a more realistic indicator of age.
 
 ```{r meetup_first_event, message=FALSE, warning=FALSE}
 
@@ -611,6 +626,8 @@ ggplot(past_event_age, aes(x=location, y=first_meetup_age)) +
 ```
 
 ## First Meetup vs Created
+
+How big of a difference do we see between the first event and the created by date? If the creation date was used to determine age, how might the ranking of meetup groups by age be affected?
 
 ```{r first_meetup_vs_created, message=FALSE, warning=FALSE, fig.width=10, fig.height=8}
 
@@ -648,7 +665,9 @@ A proposed metric would be to identify what groups have yet to have a first meet
 
 ## Event Interval
 
-How much time passes between the Meetup events? Are some groups regularly meeting every month? What is the typical time between Meetup groups?
+How much time passes between the Meetup events? Are some groups regularly meeting every month? What is the typical time between Meetup groups? This metric needs to be explored further.
+
+This plot is hard to read and I don't think this is the best metric to use as is. The idea here was just to show the overall distribution for all of the groups. A different visualization might be better here. Something to explore further might be looking for consistency in time between events and determining what's "normal" for each individual meetup. 
 
 ```{r event_interval}
 
@@ -715,6 +734,8 @@ ggplot(event_intervals_curr %>% filter(region=="America"), aes(x=local_date, y=d
 
 ```
 
+This looks for the most common event intervals to compare across groups. A density plot might also be useful here to see what intervals are the most common.
+
 ```{r event_interval_summary}
 
 event_intervals_summary <- event_intervals_curr %>%
@@ -767,12 +788,12 @@ Related to intervals above. In a given time period, how many meetups does each g
 
 ### Upcoming Events Endpoint vs Fetch per Group
 
-The Upcoming Events endpoint appears to be pretty limited in what it returns.
+The Upcoming Events endpoint appears to be pretty limited in what it returns. These are groups that are missing from the upcoming events data that was retrieved.
 
 ```{r upcoming_vs_future, message=FALSE, warning=FALSE}
 
 meetup_events_upcoming <- read_csv(paste(params$output_folder, "rladies_meetup_upcoming_events.csv", sep="/"))
-meetup_events_upcoming <- meetup_events_upcoming %>% mutate(id=as.character(id))
+meetup_events_upcoming <- meetup_events_upcoming %>% mutate(id=id)
 
 meetup_events_current <- read_csv(paste(params$output_folder, "rladies_meetup_events_current.csv", sep="/"))
 
@@ -839,6 +860,7 @@ ggplot(past_rsvp_summary, aes(x=event_ym, y=yes_rsvp_sum_grp)) +
   labs(x="Event Month", y="Yes RSVPs", fill="Region", title="Past Yes RSVPs by Region")
 ```
 
+How many yes RSVP's does each group typically get? This plot is ordered by number of members reported by Meetup to show how misleading number of members can be when considering who actually engaged with the group.
 
 ```{r past_rsvp_freq, message=FALSE}
 
@@ -868,8 +890,8 @@ ggplot(past_rsvp_freq, aes(x=location, y=rsvps_pct_mode)) +
   theme_few() +
   scale_y_continuous(labels=percent) +
   coord_flip() +
-  labs(x="Event Month", y="% of Unique Members who RSVPed at least once", fill="Region", 
-       title="Yes RSVPs - Most Frequent")
+  labs(x="Chapter", y="% of Unique Members who RSVPed at least once", fill="Region", 
+       title="Yes RSVPs - Most Frequent, Ordered by # Members")
 
 ```
 
@@ -895,23 +917,23 @@ ggplot(past_rsvps_month_curr, aes(x=event_month, y=yes_rsvp_count)) +
 ggplot(past_rsvps_month_curr %>% filter(region %in% c("US", "Canada")), aes(x=event_month, y=yes_rsvp_count)) +
   geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location)) +
   theme_few() +
-  labs(x="Event Month", y="# Yes RSVPs", fill="Region", title="Yes RSVPs by Chapter (North America)") +
+  labs(x="Event Month", y="# Yes RSVPs", fill="Chapter", title="Yes RSVPs by Chapter (North America)") +
   guides(fill=guide_legend(ncol = 1))
 
 ggplot(past_rsvps_month_curr %>% filter(region=="Europe"), aes(x=event_month, y=yes_rsvp_count)) +
   geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location)) +
   theme_few() +
-  labs(x="Event Month", y="# Yes RSVPs", fill="Region", title="Yes RSVPs by Chapter (Europe)")
+  labs(x="Event Month", y="# Yes RSVPs", fill="Chapter", title="Yes RSVPs by Chapter (Europe)")
 
 ggplot(past_rsvps_month_curr %>% filter(region %in% c("Australia", "Asia", "Africa")), aes(x=event_month, y=yes_rsvp_count)) +
   geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location)) +
   theme_few() +
-  labs(x="Event Month", y="# Yes RSVPs", fill="Region", title="Yes RSVPs by Chapter (APAC)")
+  labs(x="Event Month", y="# Yes RSVPs", fill="Chapter", title="Yes RSVPs by Chapter (APAC)")
 
 ggplot(past_rsvps_month_curr %>% filter(region=="America"), aes(x=event_month, y=yes_rsvp_count)) +
   geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location)) +
   theme_few() +
-  labs(x="Event Month", y="# Yes RSVPs", fill="Region", title="Yes RSVPs by Chapter (Latin America)")
+  labs(x="Event Month", y="# Yes RSVPs", fill="Chapter", title="Yes RSVPs by Chapter (Latin America)")
 ```
 
 
@@ -921,7 +943,9 @@ Percent RSVPs - depends on total membership which only reports an overall total,
 
 ggplot(past_rsvps_month_curr, aes(x=event_month, y=yes_rsvp_pct)) +
   geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location), show.legend = FALSE) +
-  facet_wrap(~ region, scales="free")
+  facet_wrap(~ region, scales="free") +
+  theme_few() +
+  labs(x="Event Month", y="% Members RSVPed", fill="Chapter", title="% Members RSVPs by Chapter")
 ```
 
 ```{r rsvps_pct_per_meetup_by_region, fig.width=10, fig.height=8}
@@ -995,6 +1019,7 @@ num_events_check <- meetup_events_past_merge %>%
   anti_join(member_rsvps, by=c("id" = "event.id")) %>% 
   filter(yes_rsvp_count > 0)
 
+# This should be zero rows
 num_events_check
 
 # proportion of events rsvp'ed to by members in list
@@ -1041,7 +1066,7 @@ ggplot(member_rsvps_pct %>%
 
 When we think of members, we think of people who regularly attend R-Ladies events. One metric we could consider in addition to total members (people who have signed up) is "active members".
 
-The plot below uses the inverse log to determine a scaled proportion to check RSVP's against. A group with a smaller number of events should expect more active members to have attended a higher proportion of those events (log(2) = 1 -> 1/1 = 100%, log(42) = 4 -> 1/4 = 25%)). This method also filters out groups with only one event (log(1) = 0 -> 1/0 = Inf).
+The plot below uses the inverse log to determine a scaled proportion to check RSVP's against. A group with a smaller number of events should expect more active members to have attended a higher proportion of those events (log(2) = 1 -> 1/1 = 100%, log(42) = 4 -> 1/4 = 25%)). This method also filters out groups with only one event (log(1) = 0 -> 1/0 = Inf). This is more of a "throwing spagetti on a wall" method to see if anything sticks. A better method to determine true "active members" RSVP proportion should be explored.
 
 ```{r rsvps_by_member_plot, fig.width=10, fig.height=10}
 
@@ -1051,14 +1076,14 @@ ggplot(member_rsvps_pct_summary %>%
   geom_bar(aes(fill=reorder(paste0(round(rsvps_events_pct,1)*100, "%"), -rsvps_events_pct)), 
            stat="identity", position="stack") +
   theme_few() +
-  labs(x="Chapter", y="# Members", fill="% Events", title="Most Active Members by % Events RSVPed To") +
+  labs(x="Chapter", y="# Members", fill="% Events RSVPed", title="Most Active Members by % Events RSVPed To") +
   coord_flip()
 
 ```
 
 ### RSVP Proportion
 
-To better understand the significance of of the "active" membership numbers computed above, we convert them into a proportion using the total number of members who have RSVPed.
+To better understand the significance of of the "active" membership numbers computed above, we convert them into a proportion using the total number of members who have RSVPed. What proportion of all members who RSVPed to at least one meetup do "active members" represent?
 
 ```{r rsvp_proportion_plots, fig.width=10, fig.height=10}
 
@@ -1148,14 +1173,13 @@ ggplot(meetup_rsvp_group_merge, aes(x=reorder(chapter, members), y=rsvp_members_
   geom_bar(aes(fill=chapter), stat="identity", position="dodge", show.legend = FALSE) +
   theme_few() +
   scale_y_continuous(labels=percent) +
-  labs(x="Chapter", y="No RSVP Members - RSVPed Members (Scaled)", 
+  labs(x="Chapter", y="No RSVP Members - RSVPed Members (Scaled via %)", 
        title="Members w/o RSVP vs RSVP Members - Ordered by # Members") +
   coord_flip()
 
 ggplot(meetup_rsvp_group_merge, aes(x=round(rsvp_members_diff_pct, 1))) +
   geom_histogram(bins=12) +
   theme_few() +
-  scale_y_continuous(labels = percent) +
   labs(x="No RSVP Members - RSVPed Members", title="Members w/o RSVP vs RSVP Members")
 ```
 
