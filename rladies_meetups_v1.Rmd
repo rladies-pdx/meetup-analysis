@@ -1,7 +1,7 @@
 ---
 title: "R-Ladies Meetups"
 author: "Augustina Ragwitz"
-date: "November 28, 2017"
+date: "December 31, 2017"
 output: 
   html_document:
     toc: true
@@ -377,9 +377,9 @@ member_rsvps_query_params <- list(
 
 dir.create(file.path(paste(folder, "rladies_member_rsvps", sep="/")))
 
-# meetup_member_rsvps <- data_frame()
+meetup_member_rsvps <- data_frame()
 
-for (n in 322:nrow(meetup_events_past)) {
+for (n in 1:nrow(meetup_events_past)) {
   rsvps_url <- paste(base_url, meetup_events_past[n,]["group.urlname"], "events", meetup_events_past[n,]["id"], "rsvps", 
                      sep="/")
   print(paste("Trying url:", rsvps_url))
