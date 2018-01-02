@@ -610,7 +610,7 @@ past_event_age <- meetup_events_past_merge %>%
             location=first(group.localized_location),
             region=first(region),
             group.created=first(group.created))  %>%
-  mutate(first_meetup_age=difftime(as_datetime("2017-12-01"), first_meetup, unit="days"),
+  mutate(first_meetup_age=difftime(Sys.Date(), first_meetup, unit="days"),
          location=reorder(location, first_meetup_age))
 ```
 
@@ -633,7 +633,7 @@ How big of a difference do we see between the first event and the created by dat
 
 created_vs_first <- past_event_age %>%
   mutate(
-    group_age = difftime(as_datetime("2017-12-01"), group.created, units="days"),
+    group_age = difftime(Sys.Date(), group.created, units="days"),
     created_interval=difftime(first_meetup, group.created, units="days"),
     location=reorder(location, -created_interval))
 
