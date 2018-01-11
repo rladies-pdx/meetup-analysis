@@ -1,0 +1,230 @@
+---
+title: "RLadies Meetup Groups - No First Meetup"
+author: "Augustina Ragwitz"
+date: "January 9, 2018"
+output: html_document
+params:
+  meetup_api_key: !r Sys.getenv("API_KEY_MEETUP_RLADIES")
+  archive_folder: !r Sys.Date()
+  output_folder: "latest"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(dplyr)
+library(ggplot2)
+library(ggthemes)
+library(httr)
+library(jsonlite)
+library(lubridate)
+library(maps)
+library(purrr)
+library(readr)
+library(reshape2)
+library(scales)
+library(stringr)
+library(tidyr)
+```
+
+# Meetup Data
+
+```{r globals, warning=FALSE}
+dir.create(file.path(params$output_folder))
+dir.create(file.path(params$archive_folder))
+
+get_meetups <- function (url, query) {
+  req <- GET(url, query=query)
+  print(paste(req$url))
+  json <- content(req, as = "text")
+  things <- fromJSON(json, flatten=TRUE)
+  return(things)
+}
+```
+
+## R-Ladies Meetup Groups
+
+
+```{r find_groups}
+
+get_rladies_groups <- function (folder) {
+  
+  groups_url <- "https://api.meetup.com/find/groups"
+
+  groups_query_params <- list(
+    key=params$meetup_api_key, 
+    sign=TRUE,
+    page=200,
+    radius="global")
+  
+  # by topic
+  meetup_groups_topic <- get_meetups(groups_url, append(groups_query_params, c(topic_id=1513883, order="members")))
+  
+  # by text + category
+  meetup_groups_text <- get_meetups(groups_url, append(groups_query_params, c(text="r-ladies", category=34)))
+  
+  meetup_groups_aggr <- bind_rows(meetup_groups_topic, meetup_groups_text %>% anti_join(meetup_groups_topic, by="id"))
+  meetup_groups <- meetup_groups_aggr %>% filter(str_detect(name, "[Rr]([ -]?)[Ll]adies"))
+  
+  meetup_groups <- meetup_groups %>%
+    mutate(events_url = paste("https://api.meetup.com/", urlname, "/events", sep="")) %>%
+    select(-meta_category.category_ids) # remove lists
+  
+  write_csv(meetup_groups, paste(folder, "rladies_meetup_groups.csv", sep="/"), 
+            na = "")
+  write_csv(meetup_groups_topic %>% select(-meta_category.category_ids), 
+            paste(folder, "rladies_meetup_groups_topic.csv", sep="/"), 
+            na = "")
+  write_csv(meetup_groups_text %>% select(-meta_category.category_ids), 
+            paste(folder, "rladies_meetup_groups_text.csv", sep="/"), 
+            na = "")
+  return(meetup_groups)
+}
+
+```
+
+## R-Ladies Meetup Events
+
+Filter out groups with no next event.
+
+```{r, message=FALSE}
+meetup_groups <- read_csv(paste(params$output_folder, "rladies_meetup_groups.csv", sep="/"))
+
+get_rladies_groups_no_upcoming <- function(folder, groups){
+  meetup_groups_no_upcoming <- meetup_groups %>% filter(is.na(next_event.id))
+  write_csv(meetup_groups_no_upcoming, 
+            paste(folder, "rladies_meetup_groups_no_upcoming.csv", sep="/"), 
+            na = "")
+  return(meetup_groups_no_upcoming)
+}
+
+```
+
+For groups that don't have a next event, get the last event they had.
+
+```{r}
+# This gets throttled, can't use function
+
+#get_rladies_past_events <- function (folder, meetup_groups) {
+meetup_groups_no_upcoming <- groups_no_upcoming
+folder <- params$archive_folder
+
+  past_events_query_params <- list(
+    key=params$meetup_api_key, 
+    sign=TRUE,
+    page=1,
+    status="past"
+  )
+  
+  dir.create(file.path(paste(folder, "rladies_meetup_events", sep="/")))
+  
+  meetup_events_past <- data_frame()
+
+  for (n in 32:nrow(meetup_groups_no_upcoming)) {
+    events_url <- meetup_groups_no_upcoming[n,]["events_url"]
+    print(paste("Trying url:", events_url$events_url))
+    meetups <- get_meetups(events_url$events_url, past_events_query_params)
+    if(length(meetups)== 0) {
+      next()
+    }
+  
+    meetups <- meetups %>% mutate(photo_album.photo_sample=NA)
+    meetup_events_past <- bind_rows(meetup_events_past, meetups)
+    write_csv(meetup_events_past, paste0(folder, "/rladies_meetup_events/_meetup_events_past_", n, ".csv"),
+              na = "")
+  }
+  
+  write_csv(meetup_events_past, paste(folder,"rladies_meetup_events_past.csv", sep="/"), 
+            na = "")
+  #return(meetup_events_past)
+#}
+```
+
+## Get Latest
+
+Create a new archive folder and get the latest data.
+
+```{r get_latest_data, eval=FALSE, message=FALSE}
+
+# Run this first when updating archives
+dir.create(file.path(params$archive_folder))
+
+meetup_groups <- get_rladies_groups(params$archive_folder)
+groups_no_upcoming <- get_rladies_groups_no_upcoming(params$archive_folder, meetup_groups)
+
+# TODO add try/catch for throttling
+# past_events <- get_rladies_past_events(params$archive_folder, groups_no_upcoming)
+# Run ^^ manually in above code block for now then run code block below to copy archive folder to output
+
+past_events <- read_csv(paste(params$output_folder, "rladies_meetup_events_past.csv", sep="/"))
+
+```
+
+```{r copy_archive_to_latest, eval=FALSE}
+
+system2("rm", args = c("-r", params$output_folder))
+system2("cp", args = c("-R", paste(params$archive_folder), paste(params$output_folder)))
+
+```
+
+# Meetup Group Analysis
+
+## Meetup Groups Not Using R-Ladies Topic
+
+Groups that aren't showing up the R-Ladies Topic search. Organizers should add the R-Ladies topic to their group description.
+
+```{r}
+
+meetup_groups <- read_csv(paste(params$output_folder, "rladies_meetup_groups.csv", sep="/"))
+
+```
+
+
+## Meetup Groups with No First Event
+
+Groups that haven't yet had a first event. Organizers should be contacted to see how we can help them.
+
+```{r no_first_event, message=FALSE}
+
+no_upcoming <- read_csv(paste(params$output_folder, "rladies_meetup_groups_no_upcoming.csv", sep="/"))
+past_events <- read_csv(paste(params$output_folder, "rladies_meetup_events_past.csv", sep="/"))
+
+no_first_event <- no_upcoming %>% 
+  anti_join(past_events %>% select(group.id), by=c("id"="group.id"))
+
+no_first_event <- no_first_event %>%
+  mutate(created=as.POSIXct(created/1000, tz="UTC", origin="1970-01-01"),
+         meetup_age=difftime(Sys.Date(), created, unit="days"),
+         chapter=str_replace(name, "R[ -]?[Ll]adies( )?(- )?", "")) %>%
+  separate(timezone, c("region"), extra="drop", fill="left")
+         
+
+```
+
+```{r no_first_event_plot, message=FALSE}
+       
+ggplot(no_first_event, aes(x=reorder(chapter, meetup_age), y=meetup_age)) +
+  geom_bar(aes(fill=region), stat="identity") +
+  theme_few() +
+  coord_flip() +
+  labs(x="Chapter", y="Age (Days)", title="Meetup Groups with no First Event")
+  
+  
+
+```
+
+
+
+## Meetup Groups with Event Lag
+
+Groups that haven't had an event in awhile. Organizers should be contacted to see how we can help them.
+
+```{r}
+
+no_upcoming <- read_csv(paste(params$output_folder, "rladies_meetup_groups.csv", sep="/"))
+past_events <- read_csv(paste(params$output_folder, "rladies_meetup_events_past.csv", sep="/"))
+
+```
+
+
+
