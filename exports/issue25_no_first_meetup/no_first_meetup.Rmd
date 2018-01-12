@@ -87,7 +87,7 @@ get_rladies_groups <- function (folder) {
 
 Filter out groups with no next event.
 
-```{r, message=FALSE}
+```{r get_no_upcoming, message=FALSE}
 meetup_groups <- read_csv(paste(params$output_folder, "rladies_meetup_groups.csv", sep="/"))
 
 get_rladies_groups_no_upcoming <- function(folder, groups){
@@ -102,7 +102,7 @@ get_rladies_groups_no_upcoming <- function(folder, groups){
 
 For groups that don't have a next event, get the last event they had.
 
-```{r}
+```{r get_events, eval=FALSE}
 # This gets throttled, can't use function
 
 #get_rladies_past_events <- function (folder, meetup_groups) {
@@ -173,7 +173,7 @@ system2("cp", args = c("-R", paste(params$archive_folder), paste(params$output_f
 
 Groups that aren't showing up the R-Ladies Topic search. Organizers should add the R-Ladies topic to their group description.
 
-```{r}
+```{r no_topic, message=FALSE}
 
 meetup_groups <- read_csv(paste(params$output_folder, "rladies_meetup_groups.csv", sep="/"))
 
@@ -208,9 +208,6 @@ ggplot(no_first_event, aes(x=reorder(chapter, meetup_age), y=meetup_age)) +
   theme_few() +
   coord_flip() +
   labs(x="Chapter", y="Age (Days)", title="Meetup Groups with no First Event")
-  
-  
-
 ```
 
 
@@ -219,7 +216,7 @@ ggplot(no_first_event, aes(x=reorder(chapter, meetup_age), y=meetup_age)) +
 
 Groups that haven't had an event in awhile. Organizers should be contacted to see how we can help them.
 
-```{r}
+```{r event_lag, message=FALSE}
 
 no_upcoming <- read_csv(paste(params$output_folder, "rladies_meetup_groups.csv", sep="/"))
 past_events <- read_csv(paste(params$output_folder, "rladies_meetup_events_past.csv", sep="/"))
