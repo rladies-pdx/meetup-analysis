@@ -32,15 +32,19 @@ library(tidyr)
 
 # Overview
 
-R-Ladies has developed a package called MeetupR to streamline Meetup analysis. The goal of this notebook is to call the Meetup API directly to document API calls and parameters, then compare the results to the MeetupR implementation. If there are possible improvements then patches will be proposed!
+The purpose of this Exploratory Data Analysis is to provide an overview of what data are available from the Meetup API and to start thinking about how to use these data to answer questions we have about R-Ladies Meetups with a focus on "Health" metrics.
 
-Additionally it would be great to have a dynamic dashboard that shows Meetup stats so we can get the latest and greatest for conference presentations.
+In addition, this notebook seeks to explore different Meetup API workflows in order to improve the MeetupR library. R-Ladies has developed a package called MeetupR to streamline Meetup analysis. While this notebook calls the Meetup API directly to document API calls and parameters, then results should be compared to the MeetupR implementation. If there are possible improvements then patches will be proposed!
+
+Additionally this work can be integrated into the R-Ladies meetup dashboard that shows the latest Meetup stats (useful for conference presentations and other status reports).
 
 ## Repo Link
 
-https://github.com/rladies-pdx/meetup-analysis
+[https://github.com/rladies-pdx/meetup-analysis]
 
 # Data Collection
+
+This section contains API calls made to the Meetup API along with parameters. Some of the API calls experience throttling at high volumes and need to be improved. This made the workflow a bit counterintuitive.
 
 ## Meetup API Setup
 
@@ -238,6 +242,11 @@ get_rladies_future <- function (meetup_groups, folder) {
   
   for (n in 1:nrow(meetup_groups)) {
     events_url <- meetup_groups[n,]["events_url"]
+    if(is.na(events_url)) {
+      print(paste("No events url for", n, meetup_groups[n,]["name"]))
+      next()
+    }
+    
     print(paste("Trying url:", events_url$events_url))
     meetups <- get_meetups(events_url$events_url, future_events_query_params)
   
@@ -436,7 +445,12 @@ pending_groups <- meetup_groups %>%
 
 get_rladies_upcoming(params$archive_folder)
 meetup_events_calendar <- get_rladies_calendar(params$archive_folder)
-meetup_events_future <- get_rladies_future(pending_groups, params$archive_folder)
+
+if (nrow(pending_groups) > 0) {
+  meetup_events_future <- get_rladies_future(pending_groups, params$archive_folder)
+} else {
+  meetup_events_future <- data_frame()
+}
 
 meetup_events_current <- bind_rows(meetup_events_future, meetup_events_calendar)
 write_csv(meetup_events_current, paste(params$archive_folder,"rladies_meetup_events_current.csv", sep="/"), 
@@ -1102,7 +1116,9 @@ ggplot(member_rsvps_pct_summary %>%
 
 ## Membership vs RSVPs
 
-How does the total number of members compare to RSVP patterns? The goal of this is to understand how total membership may not be respresentative of actual member engagement. RSVP's are also not necessarily indicative of who is actually showing up to the events but it's the best that Meetup has to offer that is a consistent measure across groups.
+What percent of total members have ever RSVP'ed to an event and how does that compare to the total membership of the group? In most cases, the majority of group members do not RSVP to events. 
+
+The goal of this is to understand how total membership may not be respresentative of actual member engagement. RSVP's are also not necessarily indicative of who is actually showing up to the events but it's the best that Meetup has to offer that is a consistent measure across groups.
 
 ```{r members_vs_rsvps, message=FALSE}
 meetup_groups <- read_csv(paste(params$output_folder, "rladies_meetup_groups.csv", sep="/"))
@@ -1217,20 +1233,39 @@ ggplot(rsvps_vs_members %>% filter(variable %in% c("active_members_pct", "single
   coord_flip()
 ```
 
+# Proposed Metrics
 
+This exploration went in a lot of different directions and touched on some interesting possibilities. Ultimately this work identified the following larger areas of "health":
 
+ * Groups
+ * Membership
+ * Events
 
-# Conclusions
+## Groups
 
-## Proposed Metrics
-
-### Needs Topic
+#### Needs Topic
 
 Identify R-Ladies Meetups that are not using the R-Ladies topics so we can ask them to add it to their Meetup.
 
 ### No First Meetup
 
 R-Ladies Meetups that haven't had a first event yet ordered time since creation, from high to low. Groups at the top of the list should be reached out to to see if they need help. This could also be helpful for identifying possible abandoned meetups.
+
+## Membership
+
+### Membership Density
+
+Trends for total meetup group membership reported by binning meetup groups to see how many are falling into what membership range. I think this will provide a better visual for showing where the majority of the groups fall.
+
+### Active Member Density
+
+Members that RSVP to a significant proportion of events. This can be both historical and current. Current would focus on members that are "active" within a more recent time frame, where historical would be RSVP trends since the group began.
+
+### RSVP Proportion
+
+Proportion of members that are RSVP'ing to events. This should give a better idea of "true" membership by showing how many people are engaging with the group.
+
+## Events
 
 ### Meetup Event Interval
 
@@ -1240,9 +1275,6 @@ R-Ladies Meetups that haven't had a first event yet ordered time since creation,
 
 A list/report of upcoming meetups
 
-### Membership Density
-
-While it won't give us an accurate number of members, it will show changes over time
 
 
 
