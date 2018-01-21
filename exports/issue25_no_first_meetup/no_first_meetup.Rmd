@@ -112,7 +112,7 @@ folder <- params$archive_folder
   past_events_query_params <- list(
     key=params$meetup_api_key, 
     sign=TRUE,
-    page=1,
+    page=1, # TODO: this is getting the first event, not the latest one 
     status="past"
   )
   
@@ -207,6 +207,25 @@ Groups that haven't had an event in awhile. Organizers should be contacted to se
 
 no_upcoming <- read_csv(paste(params$output_folder, "rladies_meetup_groups.csv", sep="/"))
 past_events <- read_csv(paste(params$output_folder, "rladies_meetup_events_past.csv", sep="/"))
+
+event_lag <- no_upcoming %>%
+    inner_join(past_events %>% 
+                 rename(event.id = id, event.time = time) %>% 
+                 select(group.id, event.id, event.time), 
+               by=c("id"="group.id"))
+
+event_lag <- event_lag %>%
+  rename(last_event=event.time) %>%
+  mutate(created=as.POSIXct(created/1000, tz="UTC", origin="1970-01-01"),
+         meetup_age=difftime(Sys.Date(), created, unit="days"),
+         chapter=str_replace(name, "R[ -]?[Ll]adies( )?(- )?", ""),
+         last_event=as.POSIXct(last_event/1000, tz="UTC", origin="1970-01-01"),
+         last_event_since=difftime(Sys.Date(), last_event, unit="days")
+         
+         ) %>%
+  separate(timezone, c("region"), extra="drop", fill="left")
+
+event_lag %>% select(chapter, last_event_since, last_event) %>% arrange(-last_event_since)
 
 ```
 
