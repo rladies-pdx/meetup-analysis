@@ -1,7 +1,7 @@
 ---
 title: "R-Ladies Meetups"
 author: "Augustina Ragwitz"
-date: "December 31, 2017"
+date: "January 21, 2018"
 output: 
   html_document:
     toc: true
@@ -455,6 +455,9 @@ if (nrow(pending_groups) > 0) {
 meetup_events_current <- bind_rows(meetup_events_future, meetup_events_calendar)
 write_csv(meetup_events_current, paste(params$archive_folder,"rladies_meetup_events_current.csv", sep="/"), 
           na = "")
+
+# Adding this for reference, need to check that it still works
+meetup_members <- get_rladies_members(meetup_groups, params$archive_folder)
 
 ```
 
@@ -1238,44 +1241,76 @@ ggplot(rsvps_vs_members %>% filter(variable %in% c("active_members_pct", "single
 This exploration went in a lot of different directions and touched on some interesting possibilities. Ultimately this work identified the following larger areas of "health":
 
  * Groups
- * Membership
  * Events
+ * Membership
 
 ## Groups
 
-#### Needs Topic
+### Needs Topic
 
 Identify R-Ladies Meetups that are not using the R-Ladies topics so we can ask them to add it to their Meetup.
 
-### No First Meetup
+### Organizer Changes
 
-R-Ladies Meetups that haven't had a first event yet ordered time since creation, from high to low. Groups at the top of the list should be reached out to to see if they need help. This could also be helpful for identifying possible abandoned meetups.
+Report of changes to group organization, specifically if an organizer or co-organizer steps down. When the last organizer steps down, Meetup offers the opportunity for anyone to step up as the new organizer.
 
-## Membership
+### Group Diff
 
-### Membership Density
-
-Trends for total meetup group membership reported by binning meetup groups to see how many are falling into what membership range. I think this will provide a better visual for showing where the majority of the groups fall.
-
-### Active Member Density
-
-Members that RSVP to a significant proportion of events. This can be both historical and current. Current would focus on members that are "active" within a more recent time frame, where historical would be RSVP trends since the group began.
-
-### RSVP Proportion
-
-Proportion of members that are RSVP'ing to events. This should give a better idea of "true" membership by showing how many people are engaging with the group.
+Compare the "latest" meetup group list to last months to see if any groups disappeared. Also indicates how many new groups were created since the last report was run. This will be more relevant when these metrics are integrated into the dashboard and run at regular intervals.
 
 ## Events
 
 ### Meetup Event Interval
 
+How much time between meetup events groups tend to have.
+
 ### Meetup Event Frequency
+
+How many events in a given time interval do groups tend to have? Month seems like a good starting point here.
 
 ### Upcoming Meetups
 
-A list/report of upcoming meetups
+A list/report of upcoming meetups.
 
+### No First Meetup
 
+R-Ladies Meetups that haven't had a first event yet ordered time since creation, from high to low. Groups at the top of the list should be reached out to to see if they need help. This could also be helpful for identifying possible abandoned meetups.
+
+### Meetup Lag
+
+Groups that haven't had a Meetup in awhile. Also useful for identifying possible struggling chapters that need support.
+
+## Membership
+
+### Membership Change over Time
+
+The membership at past points in time can be reconstructed using member profile info. Specifically, a cumsum of when members joined the group ("joined"" column in the meetup_members data frame).
+
+### Membership Density
+
+Trends for total meetup group membership reported by binning meetup groups into appropriate ranges. This will give a better view of trends. Currently this uses a rounded natural log to create the bins but other methods should be explored further.
+
+### Active Member Density
+
+Members that RSVP to a significant proportion of events. This can be both historical and current. "Current"" would focus on members that are "active" within a more recent time frame, and "historical"" would be RSVP trends since the group began.
+
+### RSVP Proportion
+
+Proportion of members that are RSVP'ing to events. This should give a better idea of "true" membership by showing how many people are engaging with the group. Proportion of active members at the time of RSVP should be used for comparing across Meetup groups. The historical membership values would come from the "Membership Change Over Time" metric mentioned above.
+
+# Final Thoughts and Next Steps
+
+Ultimately logic for these metrics should be supported via the MeetupR package. Rather than doing a whole hog approach, it makes more sense to break the work into sub-topic areas proposed in this report (there will be overlap). For isolated EDA per topic area to further refine the proposed metrics and to integrate with MeetupR, the following order is proposed:
+
+ 1. Groups
+ 2. Events
+ 3. Membership
+  a. Using Group data
+  b. Using RSVP/Events data
+
+To track issues and milestones, see the following Github link: [https://github.com/rladies-pdx/meetup-analysis]
+
+ 
 
 
 
