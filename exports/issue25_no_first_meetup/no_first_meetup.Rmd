@@ -152,7 +152,7 @@ dir.create(file.path(params$archive_folder))
 meetup_groups <- get_rladies_groups(params$archive_folder)
 groups_no_upcoming <- get_rladies_groups_no_upcoming(params$archive_folder, meetup_groups)
 
-# TODO add try/catch for throttling
+# TODO add try/catch for throttling - or just pull past events since last pull and merge with last pull
 # past_events <- get_rladies_past_events(params$archive_folder, groups_no_upcoming)
 # Run ^^ manually in above code block for now then run code block below to copy archive folder to output
 
@@ -168,17 +168,6 @@ system2("cp", args = c("-R", paste(params$archive_folder), paste(params$output_f
 ```
 
 # Meetup Group Analysis
-
-## Meetup Groups Not Using R-Ladies Topic
-
-Groups that aren't showing up the R-Ladies Topic search. Organizers should add the R-Ladies topic to their group description.
-
-```{r no_topic, message=FALSE}
-
-meetup_groups <- read_csv(paste(params$output_folder, "rladies_meetup_groups.csv", sep="/"))
-
-```
-
 
 ## Meetup Groups with No First Event
 
@@ -210,8 +199,6 @@ ggplot(no_first_event, aes(x=reorder(chapter, meetup_age), y=meetup_age)) +
   labs(x="Chapter", y="Age (Days)", title="Meetup Groups with no First Event")
 ```
 
-
-
 ## Meetup Groups with Event Lag
 
 Groups that haven't had an event in awhile. Organizers should be contacted to see how we can help them.
@@ -222,6 +209,25 @@ no_upcoming <- read_csv(paste(params$output_folder, "rladies_meetup_groups.csv",
 past_events <- read_csv(paste(params$output_folder, "rladies_meetup_events_past.csv", sep="/"))
 
 ```
+
+## Meetup Groups Not Using R-Ladies Topic
+
+Groups that aren't showing up the R-Ladies Topic search. Organizers should add the R-Ladies topic to their group description.
+
+```{r no_topic, message=FALSE}
+
+meetup_groups <- read_csv(paste(params$output_folder, "rladies_meetup_groups.csv", sep="/"))
+meetup_groups_text <- read_csv(paste(params$output_folder, "rladies_meetup_groups_text.csv", sep="/"))
+
+# group + organizer to contact
+meetups_missing_topic <- meetup_groups_text %>% anti_join(meetup_groups_topic, by="id")
+
+meetups_missing_topic %>% filter(str_detect(name, "[Rr]([ -]?)[Ll]adies")) %>%
+  arrange(-members) %>% 
+  select(name, localized_location, organizer.name, members, created)
+
+```
+
 
 
 
