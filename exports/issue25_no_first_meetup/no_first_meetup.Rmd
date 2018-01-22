@@ -105,36 +105,36 @@ For groups that don't have a next event, get the last event they had.
 ```{r get_events, eval=FALSE}
 # This gets throttled, can't use function
 
-#get_rladies_past_events <- function (folder, meetup_groups) {
-meetup_groups_no_upcoming <- groups_no_upcoming
+#get_rladies_recent_past_events <- function (folder, meetup_groups) {
+meetup_groups_no_upcoming <- no_upcoming
 folder <- params$archive_folder
 
-  past_events_query_params <- list(
+  recent_past_events_query_params <- list(
     key=params$meetup_api_key, 
     sign=TRUE,
-    page=1, # TODO: this is getting the first event, not the latest one 
-    status="past"
+    status="past",
+    scroll="recent_past"
   )
   
-  dir.create(file.path(paste(folder, "rladies_meetup_events", sep="/")))
+  dir.create(file.path(paste(folder, "rladies_meetup_events_recent_past", sep="/")))
   
   meetup_events_past <- data_frame()
 
-  for (n in 32:nrow(meetup_groups_no_upcoming)) {
+  for (n in 1:nrow(meetup_groups_no_upcoming)) {
     events_url <- meetup_groups_no_upcoming[n,]["events_url"]
     print(paste("Trying url:", events_url$events_url))
-    meetups <- get_meetups(events_url$events_url, past_events_query_params)
+    meetups <- get_meetups(events_url$events_url, recent_past_events_query_params)
     if(length(meetups)== 0) {
       next()
     }
   
     meetups <- meetups %>% mutate(photo_album.photo_sample=NA)
     meetup_events_past <- bind_rows(meetup_events_past, meetups)
-    write_csv(meetup_events_past, paste0(folder, "/rladies_meetup_events/_meetup_events_past_", n, ".csv"),
+    write_csv(meetup_events_past, paste0(folder, "/rladies_meetup_events_recent_past/_meetup_events_recent_past_", n, ".csv"),
               na = "")
   }
   
-  write_csv(meetup_events_past, paste(folder,"rladies_meetup_events_past.csv", sep="/"), 
+  write_csv(meetup_events_past, paste(folder,"rladies_meetup_events_recent_past.csv", sep="/"), 
             na = "")
   #return(meetup_events_past)
 #}
@@ -156,8 +156,6 @@ groups_no_upcoming <- get_rladies_groups_no_upcoming(params$archive_folder, meet
 # past_events <- get_rladies_past_events(params$archive_folder, groups_no_upcoming)
 # Run ^^ manually in above code block for now then run code block below to copy archive folder to output
 
-past_events <- read_csv(paste(params$output_folder, "rladies_meetup_events_past.csv", sep="/"))
-
 ```
 
 ```{r copy_archive_to_latest, eval=FALSE}
@@ -176,7 +174,7 @@ Groups that haven't yet had a first event. Organizers should be contacted to see
 ```{r no_first_event, message=FALSE}
 
 no_upcoming <- read_csv(paste(params$output_folder, "rladies_meetup_groups_no_upcoming.csv", sep="/"))
-past_events <- read_csv(paste(params$output_folder, "rladies_meetup_events_past.csv", sep="/"))
+past_events <- read_csv(paste(params$output_folder, "rladies_meetup_events_recent_past.csv", sep="/"))
 
 no_first_event <- no_upcoming %>% 
   anti_join(past_events %>% select(group.id), by=c("id"="group.id"))
@@ -190,7 +188,7 @@ no_first_event <- no_first_event %>%
 
 ```
 
-```{r no_first_event_plot, message=FALSE}
+```{r no_first_event_plot, message=FALSE, fig.width=10, fig.height=8}
        
 ggplot(no_first_event, aes(x=reorder(chapter, meetup_age), y=meetup_age)) +
   geom_bar(aes(fill=region), stat="identity") +
@@ -206,28 +204,59 @@ Groups that haven't had an event in awhile. Organizers should be contacted to se
 ```{r event_lag, message=FALSE}
 
 no_upcoming <- read_csv(paste(params$output_folder, "rladies_meetup_groups.csv", sep="/"))
-past_events <- read_csv(paste(params$output_folder, "rladies_meetup_events_past.csv", sep="/"))
+past_events <- read_csv(paste(params$output_folder, "rladies_meetup_events_recent_past.csv", sep="/"))
 
-event_lag <- no_upcoming %>%
-    inner_join(past_events %>% 
-                 rename(event.id = id, event.time = time) %>% 
+latest_events <- past_events %>% 
+  filter(status=="past") %>%
+  rename(event.id = id, event.time = time) %>%
+  group_by(group.name) %>%
+  top_n(1, event.time)
+
+groups_lagged <- no_upcoming %>%
+    inner_join(latest_events %>% 
                  select(group.id, event.id, event.time), 
                by=c("id"="group.id"))
 
-event_lag <- event_lag %>%
+groups_lagged <- groups_lagged %>%
   rename(last_event=event.time) %>%
   mutate(created=as.POSIXct(created/1000, tz="UTC", origin="1970-01-01"),
          meetup_age=difftime(Sys.Date(), created, unit="days"),
          chapter=str_replace(name, "R[ -]?[Ll]adies( )?(- )?", ""),
          last_event=as.POSIXct(last_event/1000, tz="UTC", origin="1970-01-01"),
-         last_event_since=difftime(Sys.Date(), last_event, unit="days")
-         
+         last_event_days=difftime(Sys.Date(), last_event, unit="days")
          ) %>%
   separate(timezone, c("region"), extra="drop", fill="left")
 
-event_lag %>% select(chapter, last_event_since, last_event) %>% arrange(-last_event_since)
+# Special case chapter names
+groups_lagged <- groups_lagged %>% 
+  mutate(chapter=ifelse(chapter=="Spotkania Entuzjastów R-Warsaw RUG Meetup & Warsaw", "Warsaw", chapter))
+
+groups_lagged %>% select(chapter, last_event_days, last_event) %>% arrange(-last_event_days)
 
 ```
+
+```{r groups_no_next, message=FALSE, fig.width=10, fig.height=8}
+
+ggplot(groups_lagged, aes(x=reorder(chapter, last_event_days), y=last_event_days)) +
+  geom_bar(aes(fill=region), stat="identity") +
+  theme_few() +
+  coord_flip() +
+  labs(x="Chapter", y="Last Event (Days)", title="Meetup Groups with no Next Event")
+
+```
+
+```{r groups_lagged, message=FALSE, fig.width=10, fig.height=8}
+
+
+ggplot(groups_lagged %>% filter(last_event_days > 60), aes(x=reorder(chapter, last_event_days), y=last_event_days)) +
+  geom_bar(aes(fill=region), stat="identity") +
+  theme_few() +
+  coord_flip() +
+  labs(x="Chapter", y="Last Event (Days)", title="Meetup Groups with no Next Event (> 60 days since last event)")
+
+```
+
+
 
 ## Meetup Groups Not Using R-Ladies Topic
 
@@ -240,6 +269,10 @@ meetup_groups_text <- read_csv(paste(params$output_folder, "rladies_meetup_group
 
 # group + organizer to contact
 meetups_missing_topic <- meetup_groups_text %>% anti_join(meetup_groups_topic, by="id")
+
+# Special case chapter names
+meetups_missing_topic <- meetups_missing_topic %>% 
+  mutate(name=ifelse(name=="Spotkania Entuzjastów R-Warsaw RUG Meetup & R-Ladies Warsaw", "R-Ladies Warsaw", name))
 
 meetups_missing_topic %>% filter(str_detect(name, "[Rr]([ -]?)[Ll]adies")) %>%
   arrange(-members) %>% 
