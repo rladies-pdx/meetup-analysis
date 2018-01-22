@@ -1,7 +1,7 @@
 ---
 title: "RLadies Meetup Groups - No First Meetup"
 author: "Augustina Ragwitz"
-date: "January 9, 2018"
+date: "January 22, 2018"
 output: html_document
 params:
   meetup_api_key: !r Sys.getenv("API_KEY_MEETUP_RLADIES")
@@ -264,7 +264,7 @@ Groups that aren't showing up the R-Ladies Topic search. Organizers should add t
 
 ```{r no_topic, message=FALSE}
 
-meetup_groups <- read_csv(paste(params$output_folder, "rladies_meetup_groups.csv", sep="/"))
+meetup_groups_topic <- read_csv(paste(params$output_folder, "rladies_meetup_groups_topic.csv", sep="/"))
 meetup_groups_text <- read_csv(paste(params$output_folder, "rladies_meetup_groups_text.csv", sep="/"))
 
 # group + organizer to contact
