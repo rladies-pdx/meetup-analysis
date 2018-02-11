@@ -106,7 +106,7 @@ For groups that don't have a next event, get the last event they had.
 # This gets throttled, can't use function
 
 #get_rladies_recent_past_events <- function (folder, meetup_groups) {
-meetup_groups_no_upcoming <- no_upcoming
+meetup_groups_no_upcoming <- groups_no_upcoming
 folder <- params$archive_folder
 
   recent_past_events_query_params <- list(
@@ -120,7 +120,7 @@ folder <- params$archive_folder
   
   meetup_events_past <- data_frame()
 
-  for (n in 1:nrow(meetup_groups_no_upcoming)) {
+  for (n in 32:nrow(meetup_groups_no_upcoming)) {
     events_url <- meetup_groups_no_upcoming[n,]["events_url"]
     print(paste("Trying url:", events_url$events_url))
     meetups <- get_meetups(events_url$events_url, recent_past_events_query_params)
@@ -184,17 +184,17 @@ no_first_event <- no_first_event %>%
          meetup_age=difftime(Sys.Date(), created, unit="days"),
          chapter=str_replace(name, "R[ -]?[Ll]adies( )?(- )?", "")) %>%
   separate(timezone, c("region"), extra="drop", fill="left")
-         
 
 ```
 
-```{r no_first_event_plot, message=FALSE, fig.width=10, fig.height=8}
+```{r no_first_event_plot, message=FALSE, fig.width=12, fig.height=6}
        
 ggplot(no_first_event, aes(x=reorder(chapter, meetup_age), y=meetup_age)) +
   geom_bar(aes(fill=region), stat="identity") +
   theme_few() +
   coord_flip() +
   labs(x="Chapter", y="Age (Days)", title="Meetup Groups with no First Event")
+ggsave("png/no_first_meetup.png")
 ```
 
 ## Meetup Groups with Event Lag
@@ -235,7 +235,7 @@ groups_lagged %>% select(chapter, last_event_days, last_event) %>% arrange(-last
 
 ```
 
-```{r groups_no_next, message=FALSE, fig.width=10, fig.height=8}
+```{r groups_no_next, message=FALSE, fig.width=12, fig.height=6}
 
 ggplot(groups_lagged, aes(x=reorder(chapter, last_event_days), y=last_event_days)) +
   geom_bar(aes(fill=region), stat="identity") +
@@ -245,14 +245,16 @@ ggplot(groups_lagged, aes(x=reorder(chapter, last_event_days), y=last_event_days
 
 ```
 
-```{r groups_lagged, message=FALSE, fig.width=10, fig.height=8}
+```{r groups_lagged, message=FALSE, fig.width=12, fig.height=6}
 
 
-ggplot(groups_lagged %>% filter(last_event_days > 60), aes(x=reorder(chapter, last_event_days), y=last_event_days)) +
+ggplot(groups_lagged %>% filter(last_event_days > 90), aes(x=reorder(chapter, last_event_days), y=last_event_days)) +
   geom_bar(aes(fill=region), stat="identity") +
   theme_few() +
   coord_flip() +
-  labs(x="Chapter", y="Last Event (Days)", title="Meetup Groups with no Next Event (> 60 days since last event)")
+  labs(x="Chapter", y="Last Event (Days)", title="Meetup Groups with no Next Event (>90 days since last event)")
+
+ggsave("png/meetup_lag.png")
 
 ```
 
