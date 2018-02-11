@@ -333,7 +333,7 @@ dir.create(file.path(paste(folder, "rladies_meetup_events", sep="/")))
 
 meetup_events_past <- data_frame()
 
-for (n in 1:nrow(meetup_groups)) {
+for (n in 73:nrow(meetup_groups)) {
   events_url <- meetup_groups[n,]["events_url"]
   print(paste("Trying url:", events_url$events_url))
   meetups <- get_meetups(events_url$events_url, past_events_query_params)
@@ -391,7 +391,7 @@ dir.create(file.path(paste(folder, "rladies_member_rsvps", sep="/")))
 
 meetup_member_rsvps <- data_frame()
 
-for (n in 1:nrow(meetup_events_past)) {
+for (n in 458:nrow(meetup_events_past)) {
   rsvps_url <- paste(base_url, meetup_events_past[n,]["group.urlname"], "events", meetup_events_past[n,]["id"], "rsvps", 
                      sep="/")
   print(paste("Trying url:", rsvps_url))
@@ -868,13 +868,15 @@ past_rsvp_summary <- past_rsvps %>%
   summarise(yes_rsvp_sum_grp=sum(yes_rsvp_count), region=first(region))
 ```
 
-```{r past_rsvp_summary_plot, fig.width=10, fig.height=8}
+```{r past_rsvp_summary_plot, fig.width=12, fig.height=6}
 
 ggplot(past_rsvp_summary, aes(x=event_ym, y=yes_rsvp_sum_grp)) +
   geom_bar(stat="identity", aes(fill=region)) +
   theme_few() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
   labs(x="Event Month", y="Yes RSVPs", fill="Region", title="Past Yes RSVPs by Region")
+
+ggsave("png/rsvp_by_region.png")
 ```
 
 How many yes RSVP's does each group typically get? This plot is ordered by number of members reported by Meetup to show how misleading number of members can be when considering who actually engaged with the group.
@@ -916,7 +918,7 @@ ggplot(past_rsvp_freq, aes(x=location, y=rsvps_pct_mode)) +
 
 Overall RSVPS per Meetup per group (over time)
 
-```{r rsvps_per_meetup, fig.width=10, fig.height=10}
+```{r rsvps_per_meetup, fig.width=12, fig.height=6}
 
 past_rsvps_month_curr <- past_rsvps %>%
   filter(str_detect(local_date, "2017")) # TODO can we use lubridate here?
@@ -926,6 +928,8 @@ ggplot(past_rsvps_month_curr, aes(x=event_month, y=yes_rsvp_count)) +
   theme_few() +
   facet_wrap(~ region, scales="free") +
   labs(x="Event Month", y="# Yes RSVPs", fill="Region", title="Yes RSVPs by Chapter")
+
+ggsave("png/rsvp_by_chapter.png")
 
 ```
 
@@ -956,13 +960,15 @@ ggplot(past_rsvps_month_curr %>% filter(region=="America"), aes(x=event_month, y
 
 Percent RSVPs - depends on total membership which only reports an overall total, not the total at the time of the event.
 
-```{r rsvps_pct_per_meetup, fig.width=10, fig.height=10}
+```{r rsvps_pct_per_meetup, fig.width=12, fig.height=6}
 
 ggplot(past_rsvps_month_curr, aes(x=event_month, y=yes_rsvp_pct)) +
   geom_bar(stat="identity", position="dodge", aes(fill=group.localized_location), show.legend = FALSE) +
-  facet_wrap(~ region, scales="free") +
+  facet_wrap(~ region) +
   theme_few() +
   labs(x="Event Month", y="% Members RSVPed", fill="Chapter", title="% Members RSVPs by Chapter")
+
+ggsave("png/rsvp_pct_members.png")
 ```
 
 ```{r rsvps_pct_per_meetup_by_region, fig.width=10, fig.height=8}
@@ -1085,7 +1091,7 @@ When we think of members, we think of people who regularly attend R-Ladies event
 
 The plot below uses the inverse log to determine a scaled proportion to check RSVP's against. A group with a smaller number of events should expect more active members to have attended a higher proportion of those events (log(2) = 1 -> 1/1 = 100%, log(42) = 4 -> 1/4 = 25%)). This method also filters out groups with only one event (log(1) = 0 -> 1/0 = Inf). This is more of a "throwing spagetti on a wall" method to see if anything sticks. A better method to determine true "active members" RSVP proportion should be explored.
 
-```{r rsvps_by_member_plot, fig.width=10, fig.height=10}
+```{r rsvps_by_member_plot, fig.width=12, fig.height=6}
 
 ggplot(member_rsvps_pct_summary %>%
          filter(rsvps_events_pct >= 1/num_events_log), 
@@ -1095,6 +1101,8 @@ ggplot(member_rsvps_pct_summary %>%
   theme_few() +
   labs(x="Chapter", y="# Members", fill="% Events RSVPed", title="Most Active Members by % Events RSVPed To") +
   coord_flip()
+
+ggsave("png/most_active_rsvp.png")
 
 ```
 
